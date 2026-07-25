@@ -207,13 +207,11 @@ class TestRegisterDevice:
             device_id="dev-1",
             hostname="myhost",
             ip_address="10.0.0.1",
-            has_barcode_scanner=True,
-            barcode_scanner_name="SM SM-2D PRODUCT HID KBW",
+            has_barcode=True,
         )
 
         payload = api._client.post.call_args[1]["json"]
-        assert payload["has_barcode_scanner"] is True
-        assert payload["barcode_scanner_name"] == "SM SM-2D PRODUCT HID KBW"
+        assert payload["has_barcode"] is True
 
 
 class TestBarcodeScanned:

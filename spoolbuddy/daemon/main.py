@@ -245,7 +245,7 @@ async def barcode_poll_loop(config: Config, api: APIClient, shared: dict):
         await api.barcode_scanned(device_id=config.device_id, barcode=code)
 
     def is_enabled() -> bool:
-        return shared.get("barcode_scanner_enabled", True)
+        return shared.get("barcode_enabled", True)
 
     try:
         await barcode.run(on_scan, is_enabled)
@@ -441,9 +441,9 @@ async def heartbeat_loop(config: Config, api: APIClient, start_time: float, shar
                 display.set_blank_timeout(blank_timeout)
 
             # Apply barcode scanner enable/disable from backend
-            scanner_enabled = result.get("barcode_scanner_enabled")
+            scanner_enabled = result.get("barcode_enabled")
             if scanner_enabled is not None:
-                shared["barcode_scanner_enabled"] = bool(scanner_enabled)
+                shared["barcode_enabled"] = bool(scanner_enabled)
 
         display.tick()
 
@@ -484,8 +484,7 @@ async def main():
         nfc_connection=nfc.connection,
         backend_url=config.backend_url,
         has_backlight=display.has_backlight,
-        has_barcode_scanner=barcode.ok,
-        barcode_scanner_name=barcode.device_name,
+        has_barcode=barcode.ok,
     )
 
     # Use server-side calibration if available

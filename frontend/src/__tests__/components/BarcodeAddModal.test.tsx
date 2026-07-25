@@ -1,0 +1,116 @@
+/**
+ * Tests for BarcodeAddModal — the SpoolBuddy kiosk barcode add-to-inventory
+ * state machine (screens B/C/D/E/F). Covers: matched scan → confirm, a
+ * barcode-first scan with no tag → "Add Without Tag", an unmatched scan →
+ * "Find This Filament", and that creating a spool sends the scanned barcode.
+ */
+
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../utils';
+import { BarcodeAddModal } from '../../components/spoolbuddy/BarcodeAddModal';
+import type { ScannedBarcode } from '../../hooks/useSpoolBuddyState';
+
+vi.mock('../../api/client', () => ({
+  api: {
+    getSettings: vi.fn().mockResolvedValue({}),
+    getAuthStatus: vi.fn().mockResolvedValue({ auth_enabled: false }),
+    getCloudStatus: vi.fn().mockResolvedValue({ is_authenticated: false }),
+    createSpool: vi.fn().mockResolvedValue({ id: 1 }),
+    createSpoolmanInventorySpool: vi.fn().mockResolvedValue({ id: 1 }),
+    linkTagToSpoolmanSpool: vi.fn().mockResolvedValue({ id: 1 }),
+    lookupFilamentBarcode: vi.fn(),
+    searchBarcodeCatalog: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+import { api } from '../../api/client';
+
+function makeScan(over: Partial<ScannedBarcode> = {}): ScannedBarcode {
+  return {
+    barcode: '6975337031234',
+    kind: 'gtin',
+    valid: true,
+    matched: true,
+    source: 'ofd',
+    material: 'PLA',
+    brand: 'Polymaker',
+    subtype: 'PolyTerra Matte',
+    color_name: 'Charcoal Black',
+    rgba: '3B3B3FFF',
+    label_weight: 1000,
+    nozzle_temp_min: 190,
+    nozzle_temp_max: 230,
+    linked_codes: [],
+    deviceId: 'sb-1',
+    receivedAt: Date.now(),
+    ...over,
+  };
+}
+
+const baseProps = {
+  isOpen: true,
+  onClose: vi.fn(),
+  trayUuid: null,
+  spoolmanMode: false,
+  spools: [],
+  onCreated: vi.fn(),
+  onFallbackQuickAdd: vi.fn(),
+  clearScan: vi.fn(),
+};
+
+describe('BarcodeAddModal', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows the confirm screen with filament + Add to Inventory when a matched scan has a tag', async () => {
+    render(
+      <BarcodeAddModal {...baseProps} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
+    );
+    expect(await screen.findByText('Charcoal Black')).toBeInTheDocument();
+    expect(screen.getByText(/Matched in Open Filament Database/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Add to Inventory$/i })).toBeInTheDocument();
+  });
+
+  it('offers "Add Without Tag" for a barcode-first scan (no tag on scale)', async () => {
+    render(
+      <BarcodeAddModal {...baseProps} scan={makeScan()} tagUid={null} scaleWeight={null} />,
+    );
+    expect(await screen.findByText('Charcoal Black')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add Without Tag/i })).toBeInTheDocument();
+  });
+
+  it('routes a valid-but-unmatched scan to the no-match screen with Find This Filament', async () => {
+    render(
+      <BarcodeAddModal
+        {...baseProps}
+        scan={makeScan({ matched: false, source: null, material: null, brand: null, subtype: null, color_name: null, rgba: null, label_weight: null })}
+        tagUid="0C1C8364"
+        scaleWeight={1247}
+      />,
+    );
+    expect(await screen.findByText(/No Match Found/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Find This Filament/i })).toBeInTheDocument();
+  });
+
+  it('creates a spool with the scanned barcode in the payload (local mode)', async () => {
+    render(
+      <BarcodeAddModal {...baseProps} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Add to Inventory$/i }));
+
+    await waitFor(() => expect(api.createSpool).toHaveBeenCalledTimes(1));
+    const payload = (api.createSpool as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.barcode).toBe('6975337031234');
+    expect(payload.material).toBe('PLA');
+    expect(payload.tag_uid).toBe('0C1C8364');
+    expect(payload.data_origin).toBe('barcode_scan');
+  });
+
+  it('does not render modal content when closed', () => {
+    render(
+      <BarcodeAddModal {...baseProps} isOpen={false} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
+    );
+    expect(screen.queryByText('Charcoal Black')).not.toBeInTheDocument();
+  });
+});

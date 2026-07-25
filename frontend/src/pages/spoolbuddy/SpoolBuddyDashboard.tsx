@@ -3,13 +3,14 @@ import { useOutletContext } from 'react-router-dom';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { SpoolBuddyOutletContext } from '../../components/spoolbuddy/SpoolBuddyLayout';
-import { api, type InventorySpool, type Printer, type PrinterStatus } from '../../api/client';
+import { api, spoolbuddyApi, type InventorySpool, type Printer, type PrinterStatus } from '../../api/client';
 import type { MatchedSpool } from '../../hooks/useSpoolBuddyState';
 import { useToast } from '../../contexts/ToastContext';
 import { SpoolIcon } from '../../components/spoolbuddy/SpoolIcon';
-import { SpoolInfoCard, UnknownTagCard } from '../../components/spoolbuddy/SpoolInfoCard';
+import { SpoolInfoCard, UnknownTagCard, ScanHint } from '../../components/spoolbuddy/SpoolInfoCard';
 import { AssignToAmsModal } from '../../components/spoolbuddy/AssignToAmsModal';
 import { LinkSpoolModal } from '../../components/spoolbuddy/LinkSpoolModal';
+import { BarcodeAddModal } from '../../components/spoolbuddy/BarcodeAddModal';
 
 function normalizeHexTag(value: string | null | undefined): string {
   if (!value) return '';
@@ -32,7 +33,7 @@ const SPOOL_COLORS = [
 ];
 
 // --- Idle state with slow color-cycling spool ---
-function IdleSpool() {
+function IdleSpool({ showScanHint }: { showScanHint?: boolean }) {
   const { t } = useTranslation();
   const [colorIndex, setColorIndex] = useState(0);
 
@@ -97,6 +98,7 @@ function IdleSpool() {
         </svg>
         <span>{t('spoolbuddy.dashboard.nfcHint', 'NFC tag will be read automatically')}</span>
       </div>
+      {showScanHint && <ScanHint className="mt-2" />}
     </div>
   );
 }
@@ -234,7 +236,20 @@ export function SpoolBuddyDashboard() {
   const [showAssignAmsModal, setShowAssignAmsModal] = useState(false);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
   const [quickAddBusy, setQuickAddBusy] = useState(false);
+  const [showBarcodeAddModal, setShowBarcodeAddModal] = useState(false);
   const [justLinkedSpool, setJustLinkedSpool] = useState<Omit<MatchedSpool, 'tag_uid'> | null>(null);
+
+  // Barcode scanner availability for this device — gates the whole flow.
+  const { data: sbDevices = [] } = useQuery({
+    queryKey: ['spoolbuddy-devices'],
+    queryFn: () => spoolbuddyApi.getDevices(),
+    staleTime: 30 * 1000,
+  });
+  const thisDevice = useMemo(
+    () => sbDevices.find((d) => d.device_id === sbState.deviceId) ?? sbDevices[0] ?? null,
+    [sbDevices, sbState.deviceId],
+  );
+  const scannerAvailable = !!thisDevice?.has_barcode && thisDevice.barcode_enabled !== false;
 
   // Track current tag from state
   const currentTagId = sbState.matchedSpool?.tag_uid ?? sbState.unknownTagUid ?? null;
@@ -339,6 +354,26 @@ export function SpoolBuddyDashboard() {
       }
     }
   }, [currentTagId, currentWeight, weightStable, displayedTagId, hiddenTagId]);
+
+  // Auto-open the barcode add flow when a fresh scan arrives. A scan while an
+  // unknown tag sits on the scale jumps straight to confirm; a scan with no
+  // tag lands on the barcode-first screen. Suppressed when a *known* spool is
+  // already showing (it's already in inventory) and when the scan is stale
+  // (surfaced by a late WS reconnect rather than a real trigger).
+  useEffect(() => {
+    const scan = sbState.lastScan;
+    if (!scan || !scannerAvailable) return;
+    if (showBarcodeAddModal) return; // already open — modal consumes it live
+    if (Date.now() - scan.receivedAt > 10_000) return;
+    if (sbState.matchedSpool) {
+      // Known spool already on screen — surface a hint instead of a modal.
+      if (scan.matched) {
+        showToast(t('spoolbuddy.barcode.alreadyInInventory', 'This spool is already in your inventory'), 'info');
+      }
+      return;
+    }
+    setShowBarcodeAddModal(true);
+  }, [sbState.lastScan, scannerAvailable, showBarcodeAddModal, sbState.matchedSpool, showToast, t]);
 
   // Auto-sync weight once when known spool first detected
 
@@ -644,11 +679,12 @@ export function SpoolBuddyDashboard() {
                   tagUid={displayedTagId}
                   scaleWeight={liveWeight ?? displayedWeight}
                   onLinkSpool={untaggedSpools.length > 0 ? () => setShowLinkModal(true) : undefined}
-                  onAddToInventory={() => setShowQuickAddModal(true)}
+                  onAddToInventory={() => scannerAvailable ? setShowBarcodeAddModal(true) : setShowQuickAddModal(true)}
+                  showScanHint={scannerAvailable}
                   onClose={handleCloseSpoolCard}
                 />
               ) : (
-                <IdleSpool />
+                <IdleSpool showScanHint={scannerAvailable} />
               )}
             </div>
           </div>
@@ -680,6 +716,28 @@ export function SpoolBuddyDashboard() {
           onLink={handleLinkTagToSpool}
         />
       )}
+
+      {/* Barcode scan → add-to-inventory flow (replaces quick-add when a
+          hardware scanner is available on this device) */}
+      <BarcodeAddModal
+        isOpen={showBarcodeAddModal}
+        onClose={() => setShowBarcodeAddModal(false)}
+        scan={sbState.lastScan}
+        tagUid={displayedTagId ?? sbState.unknownTagUid}
+        trayUuid={sbState.unknownTrayUuid}
+        scaleWeight={liveWeight ?? displayedWeight}
+        spoolmanMode={spoolmanMode}
+        spools={spools}
+        onCreated={() => {
+          refetchSpools();
+          showToast(t('spoolbuddy.barcode.addedToast', 'Added to inventory'), 'success');
+        }}
+        onFallbackQuickAdd={() => {
+          setShowBarcodeAddModal(false);
+          setShowQuickAddModal(true);
+        }}
+        clearScan={sbState.clearScan}
+      />
 
       {/* Quick-add to Inventory Modal */}
       {showQuickAddModal && displayedTagId && (

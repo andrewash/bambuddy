@@ -3012,6 +3012,20 @@ export interface BarcodeLookupResult {
   linked_codes: LinkedCode[];
 }
 
+export interface CatalogSearchRow {
+  source: 'inventory' | 'ofd' | 'spoolmandb-community';
+  spool_id: number | null;
+  material: string | null;
+  brand: string | null;
+  subtype: string | null;
+  color_name: string | null;
+  rgba: string | null;
+  label_weight: number | null;
+  nozzle_temp_min: number | null;
+  nozzle_temp_max: number | null;
+  codes: LinkedCode[];
+}
+
 export interface LabelParseResult {
   matched: boolean;
   source: 'inventory' | 'ofd' | 'spoolmandb-community' | 'parsed' | null;
@@ -5437,6 +5451,11 @@ export const api = {
       '/inventory/barcode/refresh-database',
       { method: 'POST' },
     ),
+  // SpoolBuddy "Find This Filament": search inventory + community DBs by text.
+  searchBarcodeCatalog: (q: string, limit = 25) =>
+    request<CatalogSearchRow[]>(
+      `/inventory/barcode/catalog-search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
   // ── CSV import/export (#1576) ────────────────────────────────────────────
   // dry_run=true → preview (no write); omitted → real import. Both share one
   // multipart upload helper; see `uploadSpoolsCsv` below.
@@ -7552,6 +7571,7 @@ export interface SpoolBuddyDevice {
   firmware_version: string | null;
   has_nfc: boolean;
   has_scale: boolean;
+  has_barcode: boolean;
   tare_offset: number;
   calibration_factor: number;
   nfc_reader_type: string | null;
@@ -7564,6 +7584,8 @@ export interface SpoolBuddyDevice {
   pending_command: string | null;
   nfc_ok: boolean;
   scale_ok: boolean;
+  barcode_ok: boolean;
+  barcode_enabled: boolean;
   uptime_s: number;
   update_status: string | null;
   update_message: string | null;
@@ -7620,6 +7642,12 @@ export const spoolbuddyApi = {
     request<{ status: string }>(`/spoolbuddy/devices/${deviceId}/display`, {
       method: 'PUT',
       body: JSON.stringify({ brightness, blank_timeout: blankTimeout }),
+    }),
+
+  setScannerSettings: (deviceId: string, enabled: boolean) =>
+    request<{ status: string; enabled: boolean }>(`/spoolbuddy/devices/${deviceId}/scanner`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
     }),
 
   updateSystemConfig: (deviceId: string, backendUrl: string, apiKey?: string) =>

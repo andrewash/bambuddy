@@ -82,8 +82,7 @@ class APIClient:
         nfc_connection: str | None = None,
         backend_url: str | None = None,
         has_backlight: bool = False,
-        has_barcode_scanner: bool = False,
-        barcode_scanner_name: str | None = None,
+        has_barcode: bool = False,
     ) -> dict | None:
         while True:
             result = await self._post(
@@ -101,8 +100,7 @@ class APIClient:
                     "nfc_connection": nfc_connection,
                     "backend_url": backend_url,
                     "has_backlight": has_backlight,
-                    "has_barcode_scanner": has_barcode_scanner,
-                    "barcode_scanner_name": barcode_scanner_name,
+                    "has_barcode": has_barcode,
                 },
             )
             if result is not None:
