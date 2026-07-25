@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import Keyboard from 'react-simple-keyboard';
+import KeyboardExport from 'react-simple-keyboard';
 import 'react-simple-keyboard/build/css/index.css';
 import './VirtualKeyboard.css';
+
+// react-simple-keyboard ships CommonJS only, whose module.exports is
+// { default: Keyboard, ... }. The production Rollup bundle's CJS interop hands
+// the default import that whole namespace object rather than the component, so
+// `<Keyboard>` renders an object → React error #130 the first time an input
+// focuses (dev/esbuild unwraps .default for us, so it only bit in prod).
+// Unwrap defensively so it's always the component, in both dev and prod.
+const Keyboard = ((KeyboardExport as unknown as { default?: typeof KeyboardExport }).default ??
+  KeyboardExport) as typeof KeyboardExport;
 
 const FOCUSABLE_TYPES = new Set(['text', 'password', 'email', 'search', 'url', 'number']);
 

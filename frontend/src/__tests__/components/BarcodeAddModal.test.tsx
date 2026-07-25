@@ -107,6 +107,36 @@ describe('BarcodeAddModal', () => {
     expect(payload.data_origin).toBe('barcode_scan');
   });
 
+  it('opens the Find step and renders search results without crashing', async () => {
+    (api.searchBarcodeCatalog as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        source: 'ofd',
+        spool_id: null,
+        material: 'PLA',
+        brand: 'Polymaker',
+        subtype: 'PolyTerra Matte',
+        color_name: 'Charcoal',
+        rgba: '3B3B3FFF',
+        label_weight: 1000,
+        nozzle_temp_min: 190,
+        nozzle_temp_max: 230,
+        codes: [{ code: '6975337031234', kind: 'gtin', is_refill: false }],
+      },
+    ]);
+    const unmatched = makeScan({
+      matched: false, source: null, material: null, brand: null, subtype: null,
+      color_name: null, rgba: null, label_weight: null,
+    });
+    render(<BarcodeAddModal {...baseProps} scan={unmatched} tagUid="0C1C8364" scaleWeight={1247} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Find This Filament/i }));
+    // Find step should render (no crash on the transition)
+    const input = await screen.findByPlaceholderText(/polymaker charcoal/i);
+    fireEvent.change(input, { target: { value: 'polymaker' } });
+    // Debounced search result should render (this exercises the row + SourcePill)
+    expect(await screen.findByText('Open Filament DB')).toBeInTheDocument();
+  });
+
   it('does not render modal content when closed', () => {
     render(
       <BarcodeAddModal {...baseProps} isOpen={false} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
