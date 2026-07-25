@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useCallback } from 'react';
+import type { BarcodeLookupResult } from '../api/client';
 
 export interface MatchedSpool {
   id: number;
@@ -15,34 +16,22 @@ export interface MatchedSpool {
   is_refill?: boolean;
 }
 
-export interface LinkedCode {
-  code: string;
-  kind: string;
-  is_refill: boolean;
-}
+export type { LinkedCode } from '../api/client';
 
-export interface ScannedBarcode {
-  barcode: string;
+/**
+ * A hardware scan surfaced over WS. The filament fields are the REST lookup
+ * shape (`BarcodeLookupResult`) by design — the backend builds the WS payload
+ * from the same schema — plus scan-delivery metadata.
+ */
+export type ScannedBarcode = Omit<BarcodeLookupResult, 'enabled' | 'source'> & {
+  source: BarcodeLookupResult['source'] | 'parsed';
   kind: string;
   valid: boolean;
-  matched: boolean;
-  source: 'inventory' | 'ofd' | 'spoolmandb-community' | 'parsed' | null;
-  material: string | null;
-  brand: string | null;
-  subtype: string | null;
-  color_name: string | null;
-  rgba: string | null;
-  label_weight: number | null;
-  nozzle_temp_min: number | null;
-  nozzle_temp_max: number | null;
-  /** True when the scanned code itself is a no-spool refill (backend-detected). */
-  is_refill: boolean;
-  linked_codes: LinkedCode[];
   deviceId: string;
   // Monotonic-ish receipt timestamp (Date.now) so consumers can ignore a
   // stale scan surfaced by a late WS reconnect rather than a fresh trigger.
   receivedAt: number;
-}
+};
 
 export interface SpoolBuddyState {
   weight: number | null;

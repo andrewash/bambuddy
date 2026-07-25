@@ -5,26 +5,13 @@ import { api, type InventorySpool, type CatalogSearchRow } from '../../api/clien
 import type { ScannedBarcode, LinkedCode } from '../../hooks/useSpoolBuddyState';
 import { spoolColorString } from '../../utils/colors';
 import { SpoolIcon } from './SpoolIcon';
+import { KioskToggle } from './KioskToggle';
+import { getDefaultCoreWeight } from './coreWeight';
 
 // NOTE: this is the SpoolBuddy (kiosk) add-to-inventory flow, driven entirely
 // by the hardware USB barcode scanner. It deliberately does NOT use the main
 // app's camera/OCR BarcodeScannerModal — the kiosk has no camera and runs over
 // plain HTTP where getUserMedia is unavailable.
-
-const DEFAULT_CORE_WEIGHT_KEY = 'spoolbuddy-default-core-weight';
-
-function getDefaultCoreWeight(): number {
-  try {
-    const stored = localStorage.getItem(DEFAULT_CORE_WEIGHT_KEY);
-    if (stored) {
-      const w = parseInt(stored, 10);
-      if (w >= 0 && w <= 500) return w;
-    }
-  } catch {
-    // ignore
-  }
-  return 250;
-}
 
 type Step = 'waiting' | 'manual' | 'looking_up' | 'confirm' | 'no_match' | 'find';
 
@@ -561,18 +548,7 @@ export function BarcodeAddModal({
                   {t('spoolbuddy.barcode.refillHint', 'Refills are the bare coil sold without a spool — lower core weight.')}
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isRefill}
-                disabled={busy}
-                onClick={() => setIsRefill((v) => !v)}
-                className={`relative w-[52px] h-[30px] rounded-full shrink-0 transition-colors ${isRefill ? 'bg-green-600' : 'bg-zinc-600'}`}
-              >
-                <span
-                  className={`absolute top-[3px] w-6 h-6 rounded-full bg-white transition-all ${isRefill ? 'right-[3px]' : 'left-[3px]'}`}
-                />
-              </button>
+              <KioskToggle checked={isRefill} disabled={busy} onToggle={() => setIsRefill((v) => !v)} />
             </label>
 
             {weightWarning && (

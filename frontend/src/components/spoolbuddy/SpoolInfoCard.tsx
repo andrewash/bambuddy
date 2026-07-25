@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, AlertTriangle, RefreshCw, Unlink, Barcode } from 'lucide-react';
+import { Check, AlertTriangle, RefreshCw, Unlink } from 'lucide-react';
 import type { MatchedSpool } from '../../hooks/useSpoolBuddyState';
 import { spoolbuddyApi } from '../../api/client';
 import { SpoolIcon } from './SpoolIcon';
+import { ScanHint } from './ScanHint';
 import { spoolColorString } from '../../utils/colors';
 
 // Storage key for default core weight
@@ -229,22 +230,6 @@ export function SpoolInfoCard({ spool, scaleWeight, onClose, onSyncWeight, onAss
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-interface ScanHintProps {
-  className?: string;
-}
-
-/** Green "or scan the box barcode" affordance shown when a hardware scanner
- *  is available — a scan works from this screen without tapping anything. */
-export function ScanHint({ className }: ScanHintProps) {
-  const { t } = useTranslation();
-  return (
-    <div className={`flex items-center gap-2 text-sm text-green-400 ${className ?? ''}`}>
-      <Barcode className="w-4 h-4 shrink-0" />
-      <span>{t('spoolbuddy.barcode.dashHint', 'Or scan the box barcode — no tap needed')}</span>
     </div>
   );
 }
