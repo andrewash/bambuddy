@@ -16,7 +16,9 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # Native arm64 runner (free for public repos) so the image matches the
+    # aarch64 farm host without slow QEMU emulation.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write   # lets GITHUB_TOKEN push to ghcr.io/andrewash/*
@@ -48,10 +50,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          # Farm host arch: run `uname -m` on 192.168.1.50 — x86_64 -> keep
-          # linux/amd64; aarch64 -> change to linux/arm64 (or list both, which
-          # is slower because the arm64 stage builds under QEMU emulation).
-          platforms: linux/amd64
+          # Farm host (192.168.1.50) is aarch64; built natively on the arm64
+          # runner above, so no QEMU. If you ever need amd64 too, add it here
+          # and switch runs-on back to ubuntu-latest (that stage then emulates).
+          platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
