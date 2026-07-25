@@ -309,6 +309,16 @@ def _codes_for_variant(variant_id: str) -> list[dict]:
     return list(_variant_codes.get(variant_id, [])) if _variant_codes else []
 
 
+async def codes_for_variant(variant_id: str) -> list[dict]:
+    """Public accessor: every GTIN/SKU sibling code for a variant id.
+
+    Ensures the index is loaded first, so callers iterating `get_gtin_index()`
+    can resolve each hit's sibling codes without reaching into module state.
+    """
+    await _ensure_loaded()
+    return _codes_for_variant(variant_id)
+
+
 async def lookup(barcode: str) -> tuple[dict, list[dict]] | None:
     """Resolve a GTIN barcode: (fields, all_codes) for its colour, or None if not found.
 

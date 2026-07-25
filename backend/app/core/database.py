@@ -2138,6 +2138,11 @@ async def run_migrations(conn):
     # Migration: Add system_stats JSON blob column to spoolbuddy_devices
     await _safe_execute(conn, "ALTER TABLE spoolbuddy_devices ADD COLUMN system_stats TEXT")
 
+    # Migration: Add USB barcode scanner columns to spoolbuddy_devices
+    await _safe_execute(conn, "ALTER TABLE spoolbuddy_devices ADD COLUMN has_barcode BOOLEAN DEFAULT 0")
+    await _safe_execute(conn, "ALTER TABLE spoolbuddy_devices ADD COLUMN barcode_enabled BOOLEAN DEFAULT 1")
+    await _safe_execute(conn, "ALTER TABLE spoolbuddy_devices ADD COLUMN barcode_ok BOOLEAN DEFAULT 0")
+
     # Migration: Add SSH host key for TOFU verification (H1 security fix)
     await _safe_execute(conn, "ALTER TABLE spoolbuddy_devices ADD COLUMN ssh_host_key VARCHAR(500)")
     # Migration: Widen ssh_host_key from VARCHAR(500) to TEXT — RSA-3072+ host keys

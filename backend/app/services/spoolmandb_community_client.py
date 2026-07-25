@@ -249,6 +249,12 @@ async def _download_and_parse_variants() -> list[dict]:
     return variants
 
 
+def codes_for_variant(variant: dict) -> list[dict]:
+    """Public accessor: every GTIN/SKU sibling code for a flat variant dict
+    (as returned by `get_filaments()`)."""
+    return _all_codes_for(variant)
+
+
 def _all_codes_for(variant: dict) -> list[dict]:
     """Every GTIN/SKU sibling for one color: eans + eans_refill + codes (SKUs)."""
     codes: list[dict] = []
