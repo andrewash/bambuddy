@@ -94,6 +94,9 @@ export function BarcodeAddModal({
 }: BarcodeAddModalProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>('waiting');
+  // Where the Find screen was opened from, so its Back button returns there
+  // (the scan-waiting screen B, or the no-match screen E).
+  const [findBackStep, setFindBackStep] = useState<Step>('no_match');
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [invalidCode, setInvalidCode] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
@@ -431,6 +434,18 @@ export function BarcodeAddModal({
                 type="button"
                 className={btnSecondary}
                 onClick={() => {
+                  setFindBackStep('waiting');
+                  setFindQuery('');
+                  setFindRows([]);
+                  setStep('find');
+                }}
+              >
+                <Search className="w-4 h-4" /> {t('spoolbuddy.barcode.findFilament', 'Find This Filament…')}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary}
+                onClick={() => {
                   clearScan();
                   onFallbackQuickAdd();
                 }}
@@ -608,6 +623,7 @@ export function BarcodeAddModal({
                 type="button"
                 className={btnPrimary}
                 onClick={() => {
+                  setFindBackStep('no_match');
                   setFindQuery('');
                   setFindRows([]);
                   setStep('find');
@@ -670,7 +686,7 @@ export function BarcodeAddModal({
               ))}
             </div>
             <div className="flex gap-2">
-              <button type="button" className={btnGhost} onClick={() => setStep('no_match')}>
+              <button type="button" className={btnGhost} onClick={() => setStep(findBackStep)}>
                 {t('common.back', 'Back')}
               </button>
             </div>

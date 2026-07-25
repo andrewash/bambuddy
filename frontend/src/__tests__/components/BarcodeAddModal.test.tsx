@@ -167,6 +167,20 @@ describe('BarcodeAddModal', () => {
     expect(await screen.findByText('Open Filament DB')).toBeInTheDocument();
   });
 
+  it('offers "Find This Filament" on the scan-waiting screen (B) and Back returns there', async () => {
+    // No scan yet (NFC + weight only, no box/barcode) → the modal sits on screen B.
+    render(<BarcodeAddModal {...baseProps} scan={null} tagUid="0C1C8364" scaleWeight={1247} />);
+    expect(await screen.findByText('Scan Barcode to Add')).toBeInTheDocument();
+
+    // The Find button jumps straight to the Find screen without needing a scan.
+    fireEvent.click(screen.getByRole('button', { name: /Find This Filament/i }));
+    expect(await screen.findByPlaceholderText(/polymaker charcoal/i)).toBeInTheDocument();
+
+    // Back returns to screen B (not the no-match screen it defaults to).
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    expect(await screen.findByText('Scan Barcode to Add')).toBeInTheDocument();
+  });
+
   it('does not render modal content when closed', () => {
     render(
       <BarcodeAddModal {...baseProps} isOpen={false} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
