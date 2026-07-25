@@ -6102,6 +6102,8 @@ export default {
       dashHint: "Ou escaneie o código de barras da caixa — sem tocar em nada",
       addedToast: "Adicionado ao inventário",
       alreadyInInventory: "Este carretel já está no seu inventário",
+      refillTitle: "É um refil (sem carretel)",
+      refillHint: "Refis são a bobina nua vendida sem carretel — peso do núcleo menor.",
     },
     nav: {
       dashboard: 'Painel',

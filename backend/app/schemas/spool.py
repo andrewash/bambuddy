@@ -210,7 +210,12 @@ class SpoolBase(BaseModel):
 
 
 class SpoolCreate(SpoolBase):
-    pass
+    # Write-only hint: whether `barcode` is the "refill" (no-spool) variant.
+    # Community DBs mark this via eans_refill/spool_refill, but a user-linked or
+    # manually-typed code carries no such signal, so the SpoolBuddy scan flow
+    # lets the user set it. Persisted onto the barcode's SpoolCode row; not a
+    # Spool column, so it's popped before the ORM object is built.
+    barcode_is_refill: bool = False
 
 
 class SpoolBulkCreate(BaseModel):

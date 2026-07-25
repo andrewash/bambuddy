@@ -6101,6 +6101,8 @@ export default {
       dashHint: "或直接掃描包裝盒條碼——無需點按",
       addedToast: "已新增至庫存",
       alreadyInInventory: "此料盤已在你的庫存中",
+      refillTitle: "這是補充裝（無料盤）",
+      refillHint: "補充裝是不帶料盤出售的裸線卷——芯重更低。",
     },
     nav: {
       dashboard: '儀表板',

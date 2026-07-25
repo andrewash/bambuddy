@@ -6122,6 +6122,8 @@ export default {
       dashHint: "O escanea el código de barras de la caja: sin tocar nada",
       addedToast: "Añadido al inventario",
       alreadyInInventory: "Esta bobina ya está en tu inventario",
+      refillTitle: "Es una recarga (sin bobina)",
+      refillHint: "Las recargas son la bobina de filamento sin carrete — menor peso del núcleo.",
     },
     nav: {
       dashboard: 'Panel',

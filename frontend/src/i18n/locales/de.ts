@@ -6113,6 +6113,8 @@ export default {
       dashHint: "Oder scanne den Barcode der Verpackung – kein Tippen nötig",
       addedToast: "Zum Bestand hinzugefügt",
       alreadyInInventory: "Diese Spule ist bereits in deinem Bestand",
+      refillTitle: "Dies ist ein Nachfüllpack (ohne Spule)",
+      refillHint: "Nachfüllpacks sind die nackte Rolle ohne Spule – geringeres Kerngewicht.",
     },
     nav: {
       dashboard: 'Übersicht',

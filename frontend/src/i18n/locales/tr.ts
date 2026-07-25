@@ -6058,6 +6058,8 @@ export default {
       dashHint: "Ya da kutunun barkodunu tara — dokunmaya gerek yok",
       addedToast: "Envantere eklendi",
       alreadyInInventory: "Bu makara zaten envanterinde",
+      refillTitle: "Bu bir yedek (makarasız)",
+      refillHint: "Yedekler makarasız satılan çıplak sarımdır — daha düşük çekirdek ağırlığı.",
     },
     nav: {
       dashboard: 'Gösterge Paneli',

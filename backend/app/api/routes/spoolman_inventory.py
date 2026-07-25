@@ -342,6 +342,10 @@ class SpoolmanInventoryCreate(BaseModel):
     # persisted under bambu_barcode in the spool's extra dict (same pattern
     # as slicer_filament/color_name above) and read back in _map_spoolman_spool.
     barcode: str | None = Field(None, max_length=64)
+    # Whether `barcode` is the "refill" (no-spool) variant — stored under
+    # extra.bambu_barcode_is_refill (the community DBs mark this per code, but a
+    # user-linked/typed code has no signal, so the SpoolBuddy toggle sets it).
+    barcode_is_refill: bool = False
 
     @field_validator("rgba")
     @classmethod
@@ -610,6 +614,7 @@ async def create_spool(
         if data.barcode is not None:
             await client.ensure_extra_field("bambu_barcode")
             await client.ensure_extra_field("bambu_linked_codes")
+            await client.ensure_extra_field("bambu_barcode_is_refill")
         new_extra: dict = {}
         if data.slicer_filament is not None:
             new_extra["bambu_slicer_filament"] = json.dumps(data.slicer_filament)
@@ -619,6 +624,10 @@ async def create_spool(
             new_extra["bambu_color_name"] = json.dumps(data.color_name)
         if data.barcode is not None:
             new_extra["bambu_barcode"] = json.dumps(data.barcode)
+            # The user's refill toggle: whether the primary bambu_barcode is the
+            # no-spool variant (bambu_linked_codes carry is_refill per sibling,
+            # but the primary barcode is just a string, so store it separately).
+            new_extra["bambu_barcode_is_refill"] = json.dumps(bool(data.barcode_is_refill))
             if data.barcode:
                 linked_json = await _resolve_linked_codes_json(data.barcode)
                 if linked_json:
@@ -915,6 +924,7 @@ async def update_spool(
         if bc_set:
             await client.ensure_extra_field("bambu_barcode")
             await client.ensure_extra_field("bambu_linked_codes")
+            await client.ensure_extra_field("bambu_barcode_is_refill")
         new_extra: dict = {}
         if sf_set:
             new_extra["bambu_slicer_filament"] = json.dumps(data.slicer_filament or "")
@@ -925,6 +935,10 @@ async def update_spool(
         if bc_set:
             new_extra["bambu_barcode"] = json.dumps(data.barcode or "")
             new_extra["bambu_linked_codes"] = json.dumps([])
+            # The edit form has no refill toggle, so a barcode change resets the
+            # flag (mirrors the bambu_linked_codes reset above) rather than
+            # leaving a stale value from the previous barcode.
+            new_extra["bambu_barcode_is_refill"] = json.dumps(False)
             if data.barcode:
                 linked_json = await _resolve_linked_codes_json(data.barcode)
                 if linked_json:

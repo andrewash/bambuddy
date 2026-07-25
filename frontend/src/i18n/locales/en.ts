@@ -6157,6 +6157,8 @@ export default {
       dashHint: 'Or scan the box barcode — no tap needed',
       addedToast: 'Added to inventory',
       alreadyInInventory: 'This spool is already in your inventory',
+      refillTitle: "This is a refill (no spool)",
+      refillHint: "Refills are the bare coil sold without a spool — lower core weight.",
     },
     nav: {
       dashboard: 'Dashboard',

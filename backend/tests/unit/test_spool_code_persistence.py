@@ -74,6 +74,25 @@ class TestPersistSpoolCodes:
         assert by_code["6938936716786"].is_refill is True
         assert by_code["ALZMNTABS01"].kind == "sku"
 
+    async def test_primary_is_refill_flag_is_stored(self, engine):
+        # A user-linked / manually-typed code carries no DB refill signal, so the
+        # caller (SpoolBuddy refill toggle) supplies primary_is_refill.
+        async with AsyncSession(engine) as session:
+            await _insert_spool(session, 1)
+            await _persist_spool_codes(
+                session,
+                spool_id=1,
+                primary_code="6938936716785",
+                primary_kind="gtin",
+                all_codes=[],
+                primary_is_refill=True,
+            )
+            codes = await _codes_for(session, 1)
+
+        assert len(codes) == 1
+        assert codes[0].is_primary is True
+        assert codes[0].is_refill is True
+
     async def test_dedupes_against_existing_rows(self, engine):
         async with AsyncSession(engine) as session:
             await _insert_spool(session, 1)

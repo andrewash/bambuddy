@@ -107,6 +107,20 @@ describe('BarcodeAddModal', () => {
     expect(payload.data_origin).toBe('barcode_scan');
   });
 
+  it('marks the spool as a refill (barcode_is_refill + zero core weight) when the toggle is on', async () => {
+    render(
+      <BarcodeAddModal {...baseProps} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1247} />,
+    );
+    // On the confirm screen, flip the "This is a refill" toggle, then add.
+    fireEvent.click(await screen.findByRole('switch'));
+    fireEvent.click(screen.getByRole('button', { name: /^Add to Inventory$/i }));
+
+    await waitFor(() => expect(api.createSpool).toHaveBeenCalledTimes(1));
+    const payload = (api.createSpool as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.barcode_is_refill).toBe(true);
+    expect(payload.core_weight).toBe(0);
+  });
+
   it('opens the Find step and renders search results without crashing', async () => {
     (api.searchBarcodeCatalog as ReturnType<typeof vi.fn>).mockResolvedValue([
       {

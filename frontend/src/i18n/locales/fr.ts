@@ -6103,6 +6103,8 @@ export default {
       dashHint: "Ou scannez le code-barres de la boîte — sans rien toucher",
       addedToast: "Ajouté à l'inventaire",
       alreadyInInventory: "Cette bobine est déjà dans votre inventaire",
+      refillTitle: "C'est une recharge (sans bobine)",
+      refillHint: "Les recharges sont la galette nue vendue sans bobine — poids de mandrin plus faible.",
     },
     nav: {
       dashboard: 'Tableau de bord',

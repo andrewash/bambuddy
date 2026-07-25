@@ -99,6 +99,12 @@ export function BarcodeAddModal({
   const [findLoading, setFindLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [linkedByUser, setLinkedByUser] = useState(false);
+  // "Refill" vs "with spool": the community DBs mark this via eans_refill /
+  // spool_refill, but a user-linked (Find This Filament) or manually-typed code
+  // carries no such signal — so let the user set it here. It drives the
+  // core-weight default (a bare refill has no Bambu spool) and the is_refill
+  // flag stored on the created spool's barcode.
+  const [isRefill, setIsRefill] = useState(false);
   const handledReceiptRef = useRef<number | null>(null);
 
   const coreWeight = getDefaultCoreWeight();
@@ -107,6 +113,7 @@ export function BarcodeAddModal({
     setResolved(r);
     setInvalidCode(null);
     setLinkedByUser(false);
+    setIsRefill(false);
     // A hit (matched, or fields present from OCR/manual) goes straight to
     // confirm; a valid-but-unmatched code lands on the "no match" screen so
     // the user can search for the right filament instead.
@@ -252,6 +259,9 @@ export function BarcodeAddModal({
         linked_codes: row.codes,
       }));
       setLinkedByUser(true);
+      // Prefill refill-ness from the picked catalog row if it's known there
+      // (its codes carry is_refill); otherwise leave the user's toggle as-is.
+      if (row.codes.length && row.codes.every((c) => c.is_refill)) setIsRefill(true);
       setStep('confirm');
     },
     [resolved],
@@ -265,6 +275,9 @@ export function BarcodeAddModal({
   const buildPayload = useCallback(
     (r: Resolved, useTag: boolean): Omit<InventorySpool, 'id' | 'archived_at' | 'created_at' | 'updated_at' | 'k_profiles'> => {
       const weight = scaleWeight;
+      // A refill has no Bambu spool, so default its core weight to 0 (the user
+      // can adjust if they mounted it on a reusable spool).
+      const effectiveCore = isRefill ? 0 : coreWeight;
       return {
         material: r.material || 'PLA',
         subtype: r.subtype ?? null,
@@ -274,7 +287,7 @@ export function BarcodeAddModal({
         effect_type: null,
         brand: r.brand ?? null,
         label_weight: r.label_weight ?? 1000,
-        core_weight: coreWeight,
+        core_weight: effectiveCore,
         core_weight_catalog_id: null,
         weight_used: 0,
         slicer_filament: null,
@@ -290,6 +303,7 @@ export function BarcodeAddModal({
         data_origin: 'barcode_scan',
         tag_type: !spoolmanMode && useTag ? 'generic' : null,
         barcode: r.barcode || null,
+        barcode_is_refill: isRefill,
         cost_per_kg: null,
         last_scale_weight: weight !== null ? Math.round(weight) : null,
         last_weighed_at: weight !== null ? new Date().toISOString() : null,
@@ -297,7 +311,7 @@ export function BarcodeAddModal({
         low_stock_threshold_pct: null,
       };
     },
-    [coreWeight, scaleWeight, spoolmanMode, tagUid],
+    [coreWeight, isRefill, scaleWeight, spoolmanMode, tagUid],
   );
 
   const handleCreate = useCallback(
@@ -345,7 +359,8 @@ export function BarcodeAddModal({
   if (!isOpen) return null;
 
   const grossWeight = scaleWeight !== null ? Math.round(Math.max(0, scaleWeight)) : null;
-  const estFilament = grossWeight !== null ? Math.max(0, grossWeight - coreWeight) : null;
+  const effectiveCore = isRefill ? 0 : coreWeight;
+  const estFilament = grossWeight !== null ? Math.max(0, grossWeight - effectiveCore) : null;
   const colorHex = spoolColorString(resolved?.rgba ?? null);
 
   const btnBase =
@@ -496,6 +511,31 @@ export function BarcodeAddModal({
               <Row k={t('spoolbuddy.barcode.rowBarcode', 'Barcode')} v={resolved.barcode} />
               <Row k={t('spoolbuddy.barcode.rowEst', 'Est. filament')} v={estFilament !== null ? `${estFilament} g` : '—'} />
             </div>
+
+            {/* Refill vs with-spool — the DBs can't always tell us, so let the
+                user set it; drives the core weight and the stored is_refill. */}
+            <label className="flex items-center justify-between gap-3 mb-5 px-1 cursor-pointer">
+              <div className="min-w-0">
+                <span className="text-sm text-zinc-200">
+                  {t('spoolbuddy.barcode.refillTitle', 'This is a refill (no spool)')}
+                </span>
+                <p className="text-xs text-zinc-500">
+                  {t('spoolbuddy.barcode.refillHint', 'Refills are the bare coil sold without a spool — lower core weight.')}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isRefill}
+                disabled={busy}
+                onClick={() => setIsRefill((v) => !v)}
+                className={`relative w-[52px] h-[30px] rounded-full shrink-0 transition-colors ${isRefill ? 'bg-green-600' : 'bg-zinc-600'}`}
+              >
+                <span
+                  className={`absolute top-[3px] w-6 h-6 rounded-full bg-white transition-all ${isRefill ? 'right-[3px]' : 'left-[3px]'}`}
+                />
+              </button>
+            </label>
 
             <div className="flex gap-2">
               <button type="button" className={btnGhost} onClick={handleClose} disabled={busy}>

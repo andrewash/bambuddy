@@ -5762,6 +5762,8 @@ export default {
       dashHint: "또는 상자 바코드를 스캔하세요 — 탭할 필요 없음",
       addedToast: "인벤토리에 추가됨",
       alreadyInInventory: "이 스풀은 이미 인벤토리에 있습니다",
+      refillTitle: "리필입니다 (스풀 없음)",
+      refillHint: "리필은 스풀 없이 판매되는 필라멘트 코일입니다 — 코어 무게가 더 낮습니다.",
     },
     nav: {
       dashboard: '대시보드',

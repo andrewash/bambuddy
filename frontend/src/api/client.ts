@@ -2977,6 +2977,12 @@ export interface InventorySpool {
   // barcode/label flow so a later scan of the same barcode resolves from the
   // user's own inventory before falling back to the Open Filament Database.
   barcode: string | null;
+  // Write-only hint on create: whether the primary `barcode` is the "refill"
+  // (no-spool) variant. The community DBs mark this via eans_refill/spool_refill,
+  // but a user-linked or manually-typed code has no such signal, so the kiosk
+  // scan flow lets the user set it. Persisted onto the barcode's SpoolCode row
+  // (is_refill); not echoed back on the read model.
+  barcode_is_refill?: boolean;
   archived_at: string | null;
   created_at: string;
   updated_at: string;

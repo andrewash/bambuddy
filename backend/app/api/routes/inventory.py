@@ -1378,15 +1378,20 @@ async def create_spool(
     _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_UPDATE),
 ):
     """Create a new spool."""
+    data_dict = spool_data.model_dump()
+    # barcode_is_refill is a write-only hint (persisted onto the SpoolCode row,
+    # not a Spool column) — pop it before building the ORM object.
+    barcode_is_refill = bool(data_dict.pop("barcode_is_refill", False))
+    fields_set = set(spool_data.model_fields_set) - {"barcode_is_refill"}
     try:
-        payload = await prepare_internal_spool_payload(db, spool_data.model_dump(), set(spool_data.model_fields_set))
+        payload = await prepare_internal_spool_payload(db, data_dict, fields_set)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     spool = Spool(**payload)
     db.add(spool)
     await db.commit()
     await db.refresh(spool)
-    await _persist_barcode_codes_for_spool(db, spool.id, spool.barcode)
+    await _persist_barcode_codes_for_spool(db, spool.id, spool.barcode, primary_is_refill=barcode_is_refill)
     result = await db.execute(
         select(Spool).options(selectinload(Spool.k_profiles), selectinload(Spool.codes)).where(Spool.id == spool.id)
     )
@@ -1402,9 +1407,11 @@ async def bulk_create_spools(
 ):
     """Create multiple identical spools."""
     spools = []
-    fields_set = set(data.spool.model_fields_set)
+    data_dict = data.spool.model_dump()
+    barcode_is_refill = bool(data_dict.pop("barcode_is_refill", False))
+    fields_set = set(data.spool.model_fields_set) - {"barcode_is_refill"}
     try:
-        payload = await prepare_internal_spool_payload(db, data.spool.model_dump(), fields_set)
+        payload = await prepare_internal_spool_payload(db, data_dict, fields_set)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     for _ in range(data.quantity):
@@ -1418,7 +1425,7 @@ async def bulk_create_spools(
         # external cross-reference once, not once per spool.
         code, kind, all_codes = await _resolve_codes_for_barcode(payload["barcode"])
         for spool_id in ids:
-            await _persist_spool_codes(db, spool_id, code, kind, all_codes)
+            await _persist_spool_codes(db, spool_id, code, kind, all_codes, primary_is_refill=barcode_is_refill)
     result = await db.execute(
         select(Spool).options(selectinload(Spool.k_profiles), selectinload(Spool.codes)).where(Spool.id.in_(ids))
     )
@@ -1589,14 +1596,26 @@ async def _resolve_barcode(
 
 
 async def _persist_spool_codes(
-    db: AsyncSession, spool_id: int, primary_code: str, primary_kind: str, all_codes: list[dict]
+    db: AsyncSession,
+    spool_id: int,
+    primary_code: str,
+    primary_kind: str,
+    all_codes: list[dict],
+    primary_is_refill: bool = False,
 ) -> None:
     """Store `primary_code` plus every sibling in `all_codes` against `spool_id`,
-    deduped on (spool_id, code). The scanned/typed code is always `is_primary`."""
+    deduped on (spool_id, code). The scanned/typed code is always `is_primary`.
+
+    `primary_is_refill` records whether the primary code is the no-spool refill
+    variant — the databases mark this via eans_refill/spool_refill, but a
+    user-linked/manually-typed code has no such signal, so the caller supplies
+    it (e.g. the SpoolBuddy refill toggle)."""
     existing_result = await db.execute(select(SpoolCode.code).where(SpoolCode.spool_id == spool_id))
     existing_codes = {row[0] for row in existing_result.all()}
 
-    to_insert: dict[str, dict] = {primary_code: {"kind": primary_kind, "is_refill": False, "is_primary": True}}
+    to_insert: dict[str, dict] = {
+        primary_code: {"kind": primary_kind, "is_refill": primary_is_refill, "is_primary": True}
+    }
     for entry in all_codes:
         code_val = entry.get("code")
         if not code_val or code_val == primary_code:
@@ -1631,7 +1650,9 @@ async def _resolve_codes_for_barcode(barcode: str) -> tuple[str, str, list[dict]
     return code, kind, all_codes
 
 
-async def _persist_barcode_codes_for_spool(db: AsyncSession, spool_id: int, barcode: str | None) -> None:
+async def _persist_barcode_codes_for_spool(
+    db: AsyncSession, spool_id: int, barcode: str | None, primary_is_refill: bool = False
+) -> None:
     """Replace every SpoolCode row for `spool_id` with the set cross-referenced
     from `barcode` — or with nothing, if `barcode` is unset. Delete-then-insert
     (mirrors Spoolman mode's reset-then-set of bambu_linked_codes in
@@ -1646,7 +1667,7 @@ async def _persist_barcode_codes_for_spool(db: AsyncSession, spool_id: int, barc
         await db.commit()
         return
     code, kind, all_codes = await _resolve_codes_for_barcode(barcode)
-    await _persist_spool_codes(db, spool_id, code, kind, all_codes)
+    await _persist_spool_codes(db, spool_id, code, kind, all_codes, primary_is_refill=primary_is_refill)
 
 
 class CatalogSearchRow(BaseModel):

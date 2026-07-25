@@ -6114,6 +6114,8 @@ export default {
       dashHint: "または箱のバーコードをスキャン — タップ不要",
       addedToast: "在庫に追加しました",
       alreadyInInventory: "このスプールはすでに在庫にあります",
+      refillTitle: "これは詰め替え（スプールなし）です",
+      refillHint: "詰め替えはスプールなしで売られる裸のコイルです — コア重量が軽くなります。",
     },
     nav: {
       dashboard: 'ダッシュボード',

@@ -6102,6 +6102,8 @@ export default {
       dashHint: "Oppure scansiona il codice a barre della scatola — senza toccare nulla",
       addedToast: "Aggiunto all'inventario",
       alreadyInInventory: "Questa bobina è già nel tuo inventario",
+      refillTitle: "È una ricarica (senza bobina)",
+      refillHint: "Le ricariche sono la matassa nuda venduta senza bobina — peso del nucleo inferiore.",
     },
     nav: {
       dashboard: 'Dashboard',
