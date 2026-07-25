@@ -6106,6 +6106,8 @@ export default {
       alreadyInInventory: "Cette bobine est déjà dans votre inventaire",
       refillTitle: "C'est une recharge (sans bobine)",
       refillHint: "Les recharges sont la galette nue vendue sans bobine — poids de mandrin plus faible.",
+      refillTooHeavy: "Plus lourd qu'une recharge nue — est-elle sur une bobine ?",
+      withSpoolTooLight: "Plus léger qu'une bobine vide — est-ce une recharge ?",
     },
     nav: {
       dashboard: 'Tableau de bord',

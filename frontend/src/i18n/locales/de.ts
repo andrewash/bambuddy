@@ -6116,6 +6116,8 @@ export default {
       alreadyInInventory: "Diese Spule ist bereits in deinem Bestand",
       refillTitle: "Dies ist ein Nachfüllpack (ohne Spule)",
       refillHint: "Nachfüllpacks sind die nackte Rolle ohne Spule – geringeres Kerngewicht.",
+      refillTooHeavy: "Schwerer als eine reine Nachfüllung – sitzt sie auf einer Spule?",
+      withSpoolTooLight: "Leichter als eine leere Spule – ist das eine Nachfüllung?",
     },
     nav: {
       dashboard: 'Übersicht',

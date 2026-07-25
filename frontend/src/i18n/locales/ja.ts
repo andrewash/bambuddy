@@ -6117,6 +6117,8 @@ export default {
       alreadyInInventory: "このスプールはすでに在庫にあります",
       refillTitle: "これは詰め替え（スプールなし）です",
       refillHint: "詰め替えはスプールなしで売られる裸のコイルです — コア重量が軽くなります。",
+      refillTooHeavy: "詰め替え単体より重いです。スプールに付いていませんか？",
+      withSpoolTooLight: "空のスプールより軽いです。これは詰め替えですか？",
     },
     nav: {
       dashboard: 'ダッシュボード',

@@ -6105,6 +6105,8 @@ export default {
       alreadyInInventory: "Este carretel já está no seu inventário",
       refillTitle: "É um refil (sem carretel)",
       refillHint: "Refis são a bobina nua vendida sem carretel — peso do núcleo menor.",
+      refillTooHeavy: "Mais pesado que um refil avulso — está em um carretel?",
+      withSpoolTooLight: "Mais leve que um carretel vazio — é um refil?",
     },
     nav: {
       dashboard: 'Painel',

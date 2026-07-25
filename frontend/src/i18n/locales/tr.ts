@@ -6061,6 +6061,8 @@ export default {
       alreadyInInventory: "Bu makara zaten envanterinde",
       refillTitle: "Bu bir yedek (makarasız)",
       refillHint: "Yedekler makarasız satılan çıplak sarımdır — daha düşük çekirdek ağırlığı.",
+      refillTooHeavy: "Yalın dolumdan ağır — bir makaraya mı takılı?",
+      withSpoolTooLight: "Boş makaradan hafif — bu bir dolum mu?",
     },
     nav: {
       dashboard: 'Gösterge Paneli',

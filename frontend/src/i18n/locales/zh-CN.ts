@@ -6104,6 +6104,8 @@ export default {
       alreadyInInventory: "该料盘已在你的库存中",
       refillTitle: "这是补充装（无料盘）",
       refillHint: "补充装是不带料盘出售的裸线卷——芯重更低。",
+      refillTooHeavy: "比裸补充装更重——是否装在料盘上？",
+      withSpoolTooLight: "比空料盘更轻——这是补充装吗？",
     },
     nav: {
       dashboard: '仪表板',

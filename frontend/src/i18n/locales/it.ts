@@ -6105,6 +6105,8 @@ export default {
       alreadyInInventory: "Questa bobina è già nel tuo inventario",
       refillTitle: "È una ricarica (senza bobina)",
       refillHint: "Le ricariche sono la matassa nuda venduta senza bobina — peso del nucleo inferiore.",
+      refillTooHeavy: "Più pesante di una ricarica singola: è su una bobina?",
+      withSpoolTooLight: "Più leggero di una bobina vuota: è una ricarica?",
     },
     nav: {
       dashboard: 'Dashboard',

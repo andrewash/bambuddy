@@ -6125,6 +6125,8 @@ export default {
       alreadyInInventory: "Esta bobina ya está en tu inventario",
       refillTitle: "Es una recarga (sin bobina)",
       refillHint: "Las recargas son la bobina de filamento sin carrete — menor peso del núcleo.",
+      refillTooHeavy: "Pesa más que una recarga suelta, ¿está en un carrete?",
+      withSpoolTooLight: "Pesa menos que un carrete vacío, ¿es una recarga?",
     },
     nav: {
       dashboard: 'Panel',

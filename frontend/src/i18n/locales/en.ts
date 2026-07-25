@@ -6160,6 +6160,8 @@ export default {
       alreadyInInventory: 'This spool is already in your inventory',
       refillTitle: "This is a refill (no spool)",
       refillHint: "Refills are the bare coil sold without a spool — lower core weight.",
+      refillTooHeavy: "Heavier than a bare refill — is it on a spool?",
+      withSpoolTooLight: "Lighter than an empty spool — is this a refill?",
     },
     nav: {
       dashboard: 'Dashboard',

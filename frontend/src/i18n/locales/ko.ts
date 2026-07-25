@@ -5765,6 +5765,8 @@ export default {
       alreadyInInventory: "이 스풀은 이미 인벤토리에 있습니다",
       refillTitle: "리필입니다 (스풀 없음)",
       refillHint: "리필은 스풀 없이 판매되는 필라멘트 코일입니다 — 코어 무게가 더 낮습니다.",
+      refillTooHeavy: "리필 단품보다 무겁습니다. 스풀에 끼워져 있나요?",
+      withSpoolTooLight: "빈 스풀보다 가볍습니다. 리필인가요?",
     },
     nav: {
       dashboard: '대시보드',

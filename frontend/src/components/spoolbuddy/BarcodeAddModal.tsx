@@ -374,6 +374,21 @@ export function BarcodeAddModal({
   const estFilament = grossWeight !== null ? Math.max(0, grossWeight - effectiveCore) : null;
   const colorHex = spoolColorString(resolved?.rgba ?? null);
 
+  // Sanity-check the refill toggle against the measured weight, flagging only
+  // the physically-impossible cases (keeps false positives near zero — partial
+  // spools are fine): refill ON yet heavier than a full bare coil ⇒ a spool
+  // core must be present; refill OFF yet lighter than an empty spool ⇒ there's
+  // no spool, so it's a refill.
+  const labelWeightRef = resolved?.label_weight ?? 1000;
+  let weightWarning: string | null = null;
+  if (grossWeight !== null) {
+    if (isRefill && grossWeight > labelWeightRef + coreWeight * 0.5) {
+      weightWarning = t('spoolbuddy.barcode.refillTooHeavy', 'Heavier than a bare refill — is it on a spool?');
+    } else if (!isRefill && coreWeight > 0 && grossWeight < coreWeight * 0.5) {
+      weightWarning = t('spoolbuddy.barcode.withSpoolTooLight', 'Lighter than an empty spool — is this a refill?');
+    }
+  }
+
   const btnBase =
     'flex-1 min-h-[44px] px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2';
   const btnPrimary = `${btnBase} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50`;
@@ -559,6 +574,13 @@ export function BarcodeAddModal({
                 />
               </button>
             </label>
+
+            {weightWarning && (
+              <div className="flex gap-2 items-center p-3 mb-4 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-200 text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                {weightWarning}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button type="button" className={btnGhost} onClick={handleClose} disabled={busy}>

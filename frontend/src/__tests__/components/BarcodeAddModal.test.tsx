@@ -137,6 +137,17 @@ describe('BarcodeAddModal', () => {
     expect(payload.core_weight).toBe(0);
   });
 
+  it('warns when refill is on but the roll is too heavy for a bare refill', async () => {
+    // 1300 g on a 1000 g-label roll: normal as a with-spool, impossible as a refill.
+    render(<BarcodeAddModal {...baseProps} scan={makeScan()} tagUid="0C1C8364" scaleWeight={1300} />);
+    await screen.findByText('Charcoal Black');
+    // With-spool (default): no warning.
+    expect(screen.queryByText(/Heavier than a bare refill/i)).not.toBeInTheDocument();
+    // Flip to refill → the impossible-weight warning appears.
+    fireEvent.click(screen.getByRole('switch'));
+    expect(await screen.findByText(/Heavier than a bare refill/i)).toBeInTheDocument();
+  });
+
   it('opens the Find step and renders search results without crashing', async () => {
     (api.searchBarcodeCatalog as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
