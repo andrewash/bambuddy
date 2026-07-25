@@ -417,25 +417,26 @@ async def barcode_scanned(
         fields, source, all_codes = await _resolve_barcode(db, canonical, kind, settings)
 
     scanned_is_refill = any(c.get("is_refill") for c in all_codes if c.get("code") == canonical)
+    # Build the filament fields from BarcodeLookupResponse itself so the WS
+    # payload can never drift from the REST lookup shape (the kiosk treats the
+    # two as the same type by design) — new schema fields flow automatically.
+    from backend.app.schemas.spool import BarcodeLookupResponse
+
+    lookup = BarcodeLookupResponse(
+        matched=source is not None,
+        source=source,
+        barcode=canonical or req.barcode,
+        is_refill=scanned_is_refill,
+        linked_codes=[c for c in all_codes if c.get("code") != canonical],
+        **fields,
+    )
     await ws_manager.broadcast(
         {
             "type": "spoolbuddy_barcode_scanned",
             "device_id": req.device_id,
-            "barcode": canonical or req.barcode,
             "kind": kind,
             "valid": valid,
-            "matched": source is not None,
-            "source": source,
-            "is_refill": scanned_is_refill,
-            "linked_codes": [c for c in all_codes if c.get("code") != canonical],
-            "material": fields.get("material"),
-            "brand": fields.get("brand"),
-            "subtype": fields.get("subtype"),
-            "color_name": fields.get("color_name"),
-            "rgba": fields.get("rgba"),
-            "label_weight": fields.get("label_weight"),
-            "nozzle_temp_min": fields.get("nozzle_temp_min"),
-            "nozzle_temp_max": fields.get("nozzle_temp_max"),
+            **lookup.model_dump(exclude={"enabled"}),
         }
     )
     logger.info(

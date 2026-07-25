@@ -34,7 +34,6 @@ from backend.app.schemas.spool import (
     MAX_EXTRA_COLOR_STOPS,
     BarcodeLookupResponse,
     LabelParseResponse,
-    LinkedCode,
     SpoolAssignmentCreate,
     SpoolAssignmentResponse,
     SpoolBulkCreate,
@@ -49,6 +48,7 @@ from backend.app.schemas.spool import (
 )
 from backend.app.schemas.spool_usage import SpoolUsageHistoryResponse
 from backend.app.services import ofd_client, spoolmandb_community_client
+from backend.app.services.catalog_search import BARCODE_FIELD_KEYS, CatalogSearchRow, search_catalog
 from backend.app.services.filament_label_parser import extract_barcode, extract_sku, parse_title
 from backend.app.services.location_service import (
     DUPLICATE_LOCATION_NAME,
@@ -1433,16 +1433,7 @@ async def bulk_create_spools(
     return list(result.scalars().all())
 
 
-_BARCODE_FIELD_KEYS = (
-    "material",
-    "brand",
-    "subtype",
-    "color_name",
-    "rgba",
-    "label_weight",
-    "nozzle_temp_min",
-    "nozzle_temp_max",
-)
+_BARCODE_FIELD_KEYS = BARCODE_FIELD_KEYS
 
 
 async def _external_all_codes(code: str, kind: str) -> tuple[dict, str, list[dict]] | None:
@@ -1670,31 +1661,6 @@ async def _persist_barcode_codes_for_spool(
     await _persist_spool_codes(db, spool_id, code, kind, all_codes, primary_is_refill=primary_is_refill)
 
 
-class CatalogSearchRow(BaseModel):
-    """One candidate filament for the SpoolBuddy "Find This Filament" picker —
-    a row the user can pick to link a scanned-but-unmatched barcode to a known
-    product. Mirrors the barcode-lookup field set plus a source tag and the
-    sibling codes to persist when the row is chosen."""
-
-    source: str  # "inventory" | "ofd" | "spoolmandb-community"
-    spool_id: int | None = None
-    material: str | None = None
-    brand: str | None = None
-    subtype: str | None = None
-    color_name: str | None = None
-    rgba: str | None = None
-    label_weight: int | None = None
-    nozzle_temp_min: int | None = None
-    nozzle_temp_max: int | None = None
-    codes: list[LinkedCode] = []
-
-
-def _catalog_match(tokens: list[str], *values: str | None) -> bool:
-    """Every token must appear somewhere in the concatenated searchable text."""
-    haystack = " ".join(v.lower() for v in values if v)
-    return all(tok in haystack for tok in tokens)
-
-
 @router.get("/barcode/catalog-search", response_model=list[CatalogSearchRow])
 async def barcode_catalog_search(
     q: str = Query(..., min_length=2, max_length=100),
@@ -1702,114 +1668,15 @@ async def barcode_catalog_search(
     db: AsyncSession = Depends(get_db),
     _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_READ),
 ):
-    """Search the user's inventory/catalog and the cached community databases
-    for filaments matching free text, for the kiosk "Find This Filament" flow.
+    """Search inventory + cached community databases for the kiosk "Find This
+    Filament" flow (see services/catalog_search.py for the search itself).
 
-    Ranks the user's own inventory ahead of OFD ahead of SpoolmanDB-Community.
-    The two external sources are gated on ``barcode_lookup_enabled`` but stay
-    fully offline-capable — both clients serve from their on-disk cache — so
-    this works without network access once the databases have been fetched
-    once. Declared before ``GET /barcode/{barcode}`` so the literal path wins
+    Declared before ``GET /barcode/{barcode}`` so the literal path wins
     routing over the parameterised one.
     """
-    tokens = [t for t in q.lower().split() if t]
-    if not tokens:
-        return []
-
     settings = await _load_settings_map(db)
-    lookup_enabled = settings.get("barcode_lookup_enabled", "true") == "true"
-    rows: list[CatalogSearchRow] = []
-
-    # 1. The user's own inventory (exact, authoritative).
     client = await _ensure_spoolman_client(settings)
-    if client is not None:
-        try:
-            from backend.app.api.routes._spoolman_helpers import _map_spoolman_spool
-
-            for sm in await client.get_spools():
-                try:
-                    mapped = _map_spoolman_spool(sm)
-                except ValueError:
-                    continue
-                if _catalog_match(
-                    tokens, mapped.get("brand"), mapped.get("material"), mapped.get("subtype"), mapped.get("color_name")
-                ):
-                    rows.append(
-                        CatalogSearchRow(
-                            source="inventory",
-                            spool_id=mapped.get("id"),
-                            **{k: mapped.get(k) for k in _BARCODE_FIELD_KEYS},
-                        )
-                    )
-                if len(rows) >= limit:
-                    break
-        except Exception:
-            logger.warning("Spoolman inventory search failed for catalog-search", exc_info=True)
-    else:
-        result = await db.execute(select(Spool).where(Spool.archived_at.is_(None)))
-        for spool in result.scalars().all():
-            if _catalog_match(tokens, spool.brand, spool.material, spool.subtype, spool.color_name):
-                rows.append(
-                    CatalogSearchRow(
-                        source="inventory",
-                        spool_id=spool.id,
-                        **{k: getattr(spool, k) for k in _BARCODE_FIELD_KEYS},
-                    )
-                )
-            if len(rows) >= limit:
-                break
-
-    # 2 & 3. Community databases (OFD, then SpoolmanDB-Community).
-    if lookup_enabled and len(rows) < limit:
-        try:
-            gtin_index = await ofd_client.get_gtin_index()
-            seen_variants: set[str] = set()
-            for entry in gtin_index.values():
-                variant_id = entry.get("variant_id")
-                if variant_id in seen_variants:
-                    continue
-                fields = entry.get("fields", {})
-                if _catalog_match(
-                    tokens, fields.get("brand"), fields.get("material"), fields.get("subtype"), fields.get("color_name")
-                ):
-                    seen_variants.add(variant_id)
-                    codes = await ofd_client.codes_for_variant(variant_id)
-                    rows.append(
-                        CatalogSearchRow(
-                            source="ofd",
-                            codes=[LinkedCode(**c) for c in codes],
-                            **{k: fields.get(k) for k in _BARCODE_FIELD_KEYS},
-                        )
-                    )
-                if len(rows) >= limit:
-                    break
-        except Exception:
-            logger.warning("OFD catalog-search failed", exc_info=True)
-
-    if lookup_enabled and len(rows) < limit:
-        try:
-            for variant in await spoolmandb_community_client.get_filaments():
-                if _catalog_match(
-                    tokens,
-                    variant.get("brand"),
-                    variant.get("material"),
-                    variant.get("subtype"),
-                    variant.get("color_name"),
-                ):
-                    codes = spoolmandb_community_client.codes_for_variant(variant)
-                    rows.append(
-                        CatalogSearchRow(
-                            source="spoolmandb-community",
-                            codes=[LinkedCode(**c) for c in codes],
-                            **{k: variant.get(k) for k in _BARCODE_FIELD_KEYS},
-                        )
-                    )
-                if len(rows) >= limit:
-                    break
-        except Exception:
-            logger.warning("SpoolmanDB-Community catalog-search failed", exc_info=True)
-
-    return rows[:limit]
+    return await search_catalog(db, q, limit, settings, client)
 
 
 @router.get("/barcode/{barcode}", response_model=BarcodeLookupResponse)
