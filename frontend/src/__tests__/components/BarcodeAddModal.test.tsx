@@ -42,6 +42,7 @@ function makeScan(over: Partial<ScannedBarcode> = {}): ScannedBarcode {
     label_weight: 1000,
     nozzle_temp_min: 190,
     nozzle_temp_max: 230,
+    is_refill: false,
     linked_codes: [],
     deviceId: 'sb-1',
     receivedAt: Date.now(),
@@ -113,6 +114,21 @@ describe('BarcodeAddModal', () => {
     );
     // On the confirm screen, flip the "This is a refill" toggle, then add.
     fireEvent.click(await screen.findByRole('switch'));
+    fireEvent.click(screen.getByRole('button', { name: /^Add to Inventory$/i }));
+
+    await waitFor(() => expect(api.createSpool).toHaveBeenCalledTimes(1));
+    const payload = (api.createSpool as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.barcode_is_refill).toBe(true);
+    expect(payload.core_weight).toBe(0);
+  });
+
+  it('auto-arms the refill toggle when the scanned code is itself a refill (no user action)', async () => {
+    render(
+      <BarcodeAddModal {...baseProps} scan={makeScan({ is_refill: true })} tagUid="0C1C8364" scaleWeight={1247} />,
+    );
+    // The toggle should already be on from the backend-detected refill flag.
+    const sw = await screen.findByRole('switch');
+    expect(sw).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByRole('button', { name: /^Add to Inventory$/i }));
 
     await waitFor(() => expect(api.createSpool).toHaveBeenCalledTimes(1));

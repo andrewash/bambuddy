@@ -3015,6 +3015,8 @@ export interface BarcodeLookupResult {
   label_weight: number | null;
   nozzle_temp_min: number | null;
   nozzle_temp_max: number | null;
+  /** True when the looked-up code itself is a no-spool refill (backend-detected). */
+  is_refill: boolean;
   linked_codes: LinkedCode[];
 }
 

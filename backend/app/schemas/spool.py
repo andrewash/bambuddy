@@ -351,6 +351,10 @@ class BarcodeLookupResponse(BaseModel):
     label_weight: int | None = None
     nozzle_temp_min: int | None = None
     nozzle_temp_max: int | None = None
+    # Whether the *scanned* code itself is a no-spool refill (per the community
+    # DBs' eans_refill / spool_refill). Lets the kiosk auto-arm its refill toggle
+    # instead of making the user remember to flip it for a known refill box.
+    is_refill: bool = False
     linked_codes: list[LinkedCode] = []
 
 

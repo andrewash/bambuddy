@@ -416,6 +416,7 @@ async def barcode_scanned(
         settings = await _load_settings_map(db)
         fields, source, all_codes = await _resolve_barcode(db, canonical, kind, settings)
 
+    scanned_is_refill = any(c.get("is_refill") for c in all_codes if c.get("code") == canonical)
     await ws_manager.broadcast(
         {
             "type": "spoolbuddy_barcode_scanned",
@@ -425,6 +426,7 @@ async def barcode_scanned(
             "valid": valid,
             "matched": source is not None,
             "source": source,
+            "is_refill": scanned_is_refill,
             "linked_codes": [c for c in all_codes if c.get("code") != canonical],
             "material": fields.get("material"),
             "brand": fields.get("brand"),

@@ -33,6 +33,8 @@ export interface ScannedBarcode {
   label_weight: number | null;
   nozzle_temp_min: number | null;
   nozzle_temp_max: number | null;
+  /** True when the scanned code itself is a no-spool refill (backend-detected). */
+  is_refill: boolean;
   linked_codes: LinkedCode[];
   deviceId: string;
   // Monotonic-ish receipt timestamp (Date.now) so consumers can ignore a
@@ -228,6 +230,7 @@ export function useSpoolBuddyState() {
         label_weight: d.label_weight ?? null,
         nozzle_temp_min: d.nozzle_temp_min ?? null,
         nozzle_temp_max: d.nozzle_temp_max ?? null,
+        is_refill: d.is_refill ?? false,
         linked_codes: d.linked_codes ?? [],
         deviceId: d.device_id ?? '',
         receivedAt: Date.now(),

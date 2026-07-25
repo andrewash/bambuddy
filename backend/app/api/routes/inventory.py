@@ -1830,11 +1830,13 @@ async def lookup_barcode(
     canonical, kind = classify_code(barcode)
     fields, source, all_codes = await _resolve_barcode(db, canonical, kind, settings)
     linked_codes = [c for c in all_codes if c["code"] != canonical]
+    scanned_is_refill = any(c.get("is_refill") for c in all_codes if c["code"] == canonical)
     return BarcodeLookupResponse(
         enabled=lookup_enabled,
         matched=source is not None,
         source=source,
         barcode=canonical,
+        is_refill=scanned_is_refill,
         linked_codes=linked_codes,
         **fields,
     )

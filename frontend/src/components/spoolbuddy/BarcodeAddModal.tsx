@@ -39,6 +39,8 @@ interface Resolved {
   color_name: string | null;
   rgba: string | null;
   label_weight: number | null;
+  /** The resolved code is itself a no-spool refill (backend-detected). */
+  is_refill: boolean;
   linked_codes: LinkedCode[];
 }
 
@@ -52,6 +54,7 @@ function fromScan(scan: ScannedBarcode): Resolved {
     color_name: scan.color_name,
     rgba: scan.rgba,
     label_weight: scan.label_weight,
+    is_refill: scan.is_refill,
     linked_codes: scan.linked_codes,
   };
 }
@@ -100,10 +103,11 @@ export function BarcodeAddModal({
   const [busy, setBusy] = useState(false);
   const [linkedByUser, setLinkedByUser] = useState(false);
   // "Refill" vs "with spool": the community DBs mark this via eans_refill /
-  // spool_refill, but a user-linked (Find This Filament) or manually-typed code
-  // carries no such signal — so let the user set it here. It drives the
-  // core-weight default (a bare refill has no Bambu spool) and the is_refill
-  // flag stored on the created spool's barcode.
+  // spool_refill, so a scanned/looked-up known code auto-arms this toggle
+  // (applyResolved / selectCatalogRow set it from the resolved code). A
+  // user-linked (Find This Filament) or manually-typed unknown code carries no
+  // such signal, so the user sets it here. It drives the core-weight default (a
+  // bare refill has no Bambu spool) and the is_refill flag stored on the spool.
   const [isRefill, setIsRefill] = useState(false);
   const handledReceiptRef = useRef<number | null>(null);
 
@@ -113,7 +117,9 @@ export function BarcodeAddModal({
     setResolved(r);
     setInvalidCode(null);
     setLinkedByUser(false);
-    setIsRefill(false);
+    // Auto-arm the refill toggle when the resolved code is itself a known refill
+    // (community DBs flag it); the user can still override on the confirm screen.
+    setIsRefill(r.is_refill);
     // A hit (matched, or fields present from OCR/manual) goes straight to
     // confirm; a valid-but-unmatched code lands on the "no match" screen so
     // the user can search for the right filament instead.
@@ -171,6 +177,7 @@ export function BarcodeAddModal({
             color_name: res.color_name,
             rgba: res.rgba,
             label_weight: res.label_weight,
+            is_refill: res.is_refill,
             linked_codes: res.linked_codes,
           },
           res.matched,
@@ -256,6 +263,7 @@ export function BarcodeAddModal({
         color_name: row.color_name,
         rgba: row.rgba,
         label_weight: row.label_weight,
+        is_refill: row.codes.length > 0 && row.codes.every((c) => c.is_refill),
         linked_codes: row.codes,
       }));
       setLinkedByUser(true);
