@@ -93,6 +93,29 @@ class TestPersistSpoolCodes:
         assert codes[0].is_primary is True
         assert codes[0].is_refill is True
 
+    async def test_is_refill_property_reflects_primary_code(self, engine):
+        # The Spool.is_refill read property (drives the UI "Refill" badge) must
+        # mirror the primary SpoolCode's is_refill, and be False otherwise.
+        from sqlalchemy.orm import selectinload
+
+        async with AsyncSession(engine) as session:
+            await _insert_spool(session, 1)
+            await _persist_spool_codes(
+                session, spool_id=1, primary_code="R", primary_kind="gtin", all_codes=[], primary_is_refill=True
+            )
+            await _insert_spool(session, 2)
+            await _persist_spool_codes(
+                session, spool_id=2, primary_code="W", primary_kind="gtin", all_codes=[], primary_is_refill=False
+            )
+            loaded = {}
+            for sid in (1, 2):
+                res = await session.execute(
+                    select(Spool).options(selectinload(Spool.codes)).where(Spool.id == sid)
+                )
+                loaded[sid] = res.scalar_one()
+            assert loaded[1].is_refill is True
+            assert loaded[2].is_refill is False
+
     async def test_dedupes_against_existing_rows(self, engine):
         async with AsyncSession(engine) as session:
             await _insert_spool(session, 1)

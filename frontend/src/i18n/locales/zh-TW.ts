@@ -33,6 +33,7 @@ export default {
 
   // Common
   common: {
+    refillBadge: '補充裝',
     save: '儲存',
     saving: '儲存中...',
     cancel: '取消',

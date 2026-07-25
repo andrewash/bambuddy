@@ -33,6 +33,7 @@ export default {
 
   // Ortak
   common: {
+    refillBadge: 'Dolum',
     save: 'Kaydet',
     saving: 'Kaydediliyor...',
     cancel: 'İptal',

@@ -2980,9 +2980,11 @@ export interface InventorySpool {
   // Write-only hint on create: whether the primary `barcode` is the "refill"
   // (no-spool) variant. The community DBs mark this via eans_refill/spool_refill,
   // but a user-linked or manually-typed code has no such signal, so the kiosk
-  // scan flow lets the user set it. Persisted onto the barcode's SpoolCode row
-  // (is_refill); not echoed back on the read model.
+  // scan flow lets the user set it. Persisted onto the barcode's SpoolCode row.
   barcode_is_refill?: boolean;
+  // Read-only echo of that flag (from the primary SpoolCode) — drives the
+  // "Refill" badge in the inventory list and the SpoolBuddy Current Spool panel.
+  is_refill?: boolean;
   archived_at: string | null;
   created_at: string;
   updated_at: string;

@@ -107,6 +107,11 @@ export function SpoolInfoCard({ spool, scaleWeight, onClose, onSyncWeight, onAss
               {spool.color_name || 'Unknown color'}
             </h3>
             <span className="text-xs font-mono text-zinc-500 shrink-0">#{spool.id}</span>
+            {spool.is_refill && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                {t('common.refillBadge', 'Refill')}
+              </span>
+            )}
           </div>
           <p className="text-sm text-zinc-400">
             {spool.brand} &bull; {spool.material}

@@ -661,6 +661,8 @@ export function SpoolBuddyDashboard() {
                       label_weight: s.label_weight,
                       core_weight: s.core_weight,
                       weight_used: s.weight_used,
+                      // Only the list-sourced spool carries is_refill; matchedSpool doesn't.
+                      is_refill: displayedSpool?.is_refill ?? false,
                     };
                   })()}
                   scaleWeight={liveWeight ?? displayedWeight}

@@ -30,6 +30,7 @@ export default {
     installAppSuccess: 'Bambuddy가 설치되었습니다'
   },
   common: {
+    refillBadge: '리필',
     save: '저장',
     saving: '저장 중...',
     cancel: '취소',

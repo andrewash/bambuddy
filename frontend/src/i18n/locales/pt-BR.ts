@@ -33,6 +33,7 @@ export default {
 
   // Common
   common: {
+    refillBadge: 'Refil',
     save: 'Salvar',
     saving: 'Salvando...',
     cancel: 'Cancelar',

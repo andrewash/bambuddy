@@ -325,6 +325,10 @@ class SpoolResponse(SpoolBase):
     updated_at: datetime
     k_profiles: list[SpoolKProfileResponse] = []
     linked_codes: list[LinkedCode] = []
+    # Read-only: whether the primary barcode is the no-spool "refill" variant
+    # (from its SpoolCode row). Drives the "Refill" badge in the UI. Populated
+    # from the Spool.is_refill property, so callers must eager-load `codes`.
+    is_refill: bool = False
 
     class Config:
         from_attributes = True

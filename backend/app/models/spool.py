@@ -91,6 +91,16 @@ class Spool(Base):
         """
         return [c for c in self.codes if not c.is_primary]
 
+    @property
+    def is_refill(self) -> bool:
+        """Whether this spool's primary barcode is the no-spool 'refill' variant.
+
+        Read-only display data for SpoolResponse's `is_refill` field — callers
+        must eager-load `codes` (`selectinload(Spool.codes)`) first; this never
+        triggers its own lazy load in an async context.
+        """
+        return any(c.is_primary and c.is_refill for c in self.codes)
+
 
 from backend.app.models.location import Location  # noqa: E402
 from backend.app.models.spool_assignment import SpoolAssignment  # noqa: E402

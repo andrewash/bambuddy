@@ -236,8 +236,15 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
       />
     </div>
   ),
-  material: ({ spool }) => (
-    <span className="text-sm text-white">{spool.material}</span>
+  material: ({ spool, t }) => (
+    <span className="inline-flex items-center gap-1.5 text-sm text-white">
+      {spool.material}
+      {spool.is_refill && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
+          {t('common.refillBadge')}
+        </span>
+      )}
+    </span>
   ),
   subtype: ({ spool }) => (
     <span className="text-sm text-bambu-gray">{spool.subtype || '-'}</span>
