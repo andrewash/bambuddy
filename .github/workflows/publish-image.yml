@@ -1,0 +1,59 @@
+name: Publish image to GHCR
+
+# Builds the full Bambuddy image (frontend + backend, from the root Dockerfile)
+# and publishes it to this repo's GitHub Container Registry namespace, so the
+# farm host can deploy a new build with a plain `docker compose pull` instead of
+# a hand-built, hand-shipped image.
+#
+# Publishes to ghcr.io/andrewash/bambuddy (this repo's `origin`). The built-in
+# GITHUB_TOKEN can only push to the namespace of the repo it runs in, so this
+# must run from andrewash/bambuddy (a 403 otherwise).
+on:
+  push:
+    branches:
+      - feature/spoolbuddy-barcode-scanner
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # lets GITHUB_TOKEN push to ghcr.io/andrewash/*
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `:barcode` is a stable tag to point the farm's compose `image:` at.
+      # The sanitized branch name is also published for traceability.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/andrewash/bambuddy
+          tags: |
+            type=raw,value=barcode
+            type=ref,event=branch
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Farm host arch: run `uname -m` on 192.168.1.50 — x86_64 -> keep
+          # linux/amd64; aarch64 -> change to linux/arm64 (or list both, which
+          # is slower because the arm64 stage builds under QEMU emulation).
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
