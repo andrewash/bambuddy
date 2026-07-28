@@ -488,6 +488,11 @@ async def parse_and_validate(raw_bytes: bytes, db: AsyncSession) -> ImportPrevie
             continue
 
         spool_data = spool.model_dump()
+        # `barcode_is_refill` is a write-only SpoolCreate hint, not a Spool
+        # column — the import endpoint builds the ORM object via `Spool(**spool)`,
+        # so it must not leak into the persisted dict. The CSV has no refill
+        # column anyway, so it's always the default here.
+        spool_data.pop("barcode_is_refill", None)
         if last_used is not None:
             # last_used isn't a SpoolCreate field; graft it onto the persisted
             # dict so the ORM object carries it.
