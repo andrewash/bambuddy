@@ -1154,6 +1154,13 @@ export interface APIKeyUpdate {
   expires_at?: string | null;
 }
 
+/**
+ * Tri-state calibration option (BambuStudio parity): "off" never runs it,
+ * "on" forces it every print, "auto" lets the printer skip it if it was done
+ * recently. Used by bed_levelling, flow_cali, and nozzle_offset_cali.
+ */
+export type CalibrationMode = 'off' | 'on' | 'auto';
+
 // Settings types
 export interface AppSettings {
   auto_archive: boolean;
@@ -1266,12 +1273,12 @@ export interface AppSettings {
   // User email notifications toggle
   user_notifications_enabled: boolean;
   // Default print options
-  default_bed_levelling: boolean;
-  default_flow_cali: boolean;
+  default_bed_levelling: CalibrationMode;
+  default_flow_cali: CalibrationMode;
   default_vibration_cali: boolean;
   default_layer_inspect: boolean;
   default_timelapse: boolean;
-  default_nozzle_offset_cali: boolean;
+  default_nozzle_offset_cali: CalibrationMode;
   // Staggered batch start defaults
   stagger_group_size: number;
   stagger_interval_minutes: number;
@@ -1924,6 +1931,9 @@ export interface SmartPlug {
   rest_energy_total_path: string | null;
   rest_energy_total_multiplier: number;
   printer_id: number | null;
+  // #2629: only a plug that really feeds the printer may mark it offline when
+  // switched off. Accessory plugs follow the print cycle without powering it.
+  controls_printer_power: boolean;
   enabled: boolean;
   auto_on: boolean;
   auto_off: boolean;
@@ -2000,6 +2010,8 @@ export interface SmartPlugCreate {
   rest_energy_total_path?: string | null;
   rest_energy_total_multiplier?: number;
   printer_id?: number | null;
+  // #2629
+  controls_printer_power?: boolean;
   enabled?: boolean;
   auto_on?: boolean;
   auto_off?: boolean;
@@ -2068,6 +2080,8 @@ export interface SmartPlugUpdate {
   rest_energy_total_path?: string | null;
   rest_energy_total_multiplier?: number;
   printer_id?: number | null;
+  // #2629
+  controls_printer_power?: boolean;
   enabled?: boolean;
   auto_on?: boolean;
   auto_off?: boolean;
@@ -2181,16 +2195,16 @@ export interface PrintQueueItem {
   // PrintModal's deficit warning was acknowledged.
   skip_filament_check: boolean;
   ams_mapping: number[] | null;  // AMS slot mapping for multi-color prints
-  filament_overrides: Array<{ slot_id: number; type: string; color: string; color_name?: string; force_color_match?: boolean }> | null;  // Filament overrides for model-based assignment
+  filament_overrides: Array<{ slot_id: number; type: string; color: string; color_name?: string; tray_info_idx?: string; force_color_match?: boolean }> | null;  // Filament overrides for model-based assignment
   plate_id: number | null;  // Plate ID for multi-plate 3MF files
   // Print options
-  bed_levelling: boolean;
-  flow_cali: boolean;
+  bed_levelling: CalibrationMode;
+  flow_cali: CalibrationMode;
   vibration_cali: boolean;
   layer_inspect: boolean;
   timelapse: boolean;
   use_ams: boolean;
-  nozzle_offset_cali: boolean;
+  nozzle_offset_cali: CalibrationMode;
   preheat_override: 'inherit' | 'on' | 'off';
   preheat_chamber_target_override: number | null;
   status: 'pending' | 'printing' | 'completed' | 'failed' | 'skipped' | 'cancelled';
@@ -2261,13 +2275,13 @@ export interface PrintQueueItemCreate {
   ams_mapping?: number[] | null;  // AMS slot mapping for multi-color prints
   plate_id?: number | null;  // Plate ID for multi-plate 3MF files
   // Print options
-  bed_levelling?: boolean;
-  flow_cali?: boolean;
+  bed_levelling?: CalibrationMode;
+  flow_cali?: CalibrationMode;
   vibration_cali?: boolean;
   layer_inspect?: boolean;
   timelapse?: boolean;
   use_ams?: boolean;
-  nozzle_offset_cali?: boolean;
+  nozzle_offset_cali?: CalibrationMode;
   preheat_override?: 'inherit' | 'on' | 'off';
   preheat_chamber_target_override?: number | null;
   // Auto-print G-code injection
@@ -2305,13 +2319,13 @@ export interface PrintQueueItemUpdate {
   ams_mapping?: number[];
   plate_id?: number | null;  // Plate ID for multi-plate 3MF files
   // Print options
-  bed_levelling?: boolean;
-  flow_cali?: boolean;
+  bed_levelling?: CalibrationMode;
+  flow_cali?: CalibrationMode;
   vibration_cali?: boolean;
   layer_inspect?: boolean;
   timelapse?: boolean;
   use_ams?: boolean;
-  nozzle_offset_cali?: boolean;
+  nozzle_offset_cali?: CalibrationMode;
   preheat_override?: 'inherit' | 'on' | 'off';
   preheat_chamber_target_override?: number | null;
   // Auto-print G-code injection
@@ -2326,13 +2340,13 @@ export interface PrintQueueBulkUpdate {
   auto_off_after?: boolean;
   manual_start?: boolean;
   // Print options
-  bed_levelling?: boolean;
-  flow_cali?: boolean;
+  bed_levelling?: CalibrationMode;
+  flow_cali?: CalibrationMode;
   vibration_cali?: boolean;
   layer_inspect?: boolean;
   timelapse?: boolean;
   use_ams?: boolean;
-  nozzle_offset_cali?: boolean;
+  nozzle_offset_cali?: CalibrationMode;
   preheat_override?: 'inherit' | 'on' | 'off';
   preheat_chamber_target_override?: number | null;
   // Auto-print G-code injection
@@ -2977,6 +2991,14 @@ export interface InventorySpool {
   // barcode/label flow so a later scan of the same barcode resolves from the
   // user's own inventory before falling back to the Open Filament Database.
   barcode: string | null;
+  // Write-only hint on create: whether the primary `barcode` is the "refill"
+  // (no-spool) variant. The community DBs mark this via eans_refill/spool_refill,
+  // but a user-linked or manually-typed code has no such signal, so the kiosk
+  // scan flow lets the user set it. Persisted onto the barcode's SpoolCode row.
+  barcode_is_refill?: boolean;
+  // Read-only echo of that flag (from the primary SpoolCode) — drives the
+  // "Refill" badge in the inventory list and the SpoolBuddy Current Spool panel.
+  is_refill?: boolean;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -3009,7 +3031,23 @@ export interface BarcodeLookupResult {
   label_weight: number | null;
   nozzle_temp_min: number | null;
   nozzle_temp_max: number | null;
+  /** True when the looked-up code itself is a no-spool refill (backend-detected). */
+  is_refill: boolean;
   linked_codes: LinkedCode[];
+}
+
+export interface CatalogSearchRow {
+  source: 'inventory' | 'ofd' | 'spoolmandb-community';
+  spool_id: number | null;
+  material: string | null;
+  brand: string | null;
+  subtype: string | null;
+  color_name: string | null;
+  rgba: string | null;
+  label_weight: number | null;
+  nozzle_temp_min: number | null;
+  nozzle_temp_max: number | null;
+  codes: LinkedCode[];
 }
 
 export interface LabelParseResult {
@@ -5437,6 +5475,11 @@ export const api = {
       '/inventory/barcode/refresh-database',
       { method: 'POST' },
     ),
+  // SpoolBuddy "Find This Filament": search inventory + community DBs by text.
+  searchBarcodeCatalog: (q: string, limit = 25) =>
+    request<CatalogSearchRow[]>(
+      `/inventory/barcode/catalog-search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
   // ── CSV import/export (#1576) ────────────────────────────────────────────
   // dry_run=true → preview (no write); omitted → real import. Both share one
   // multipart upload helper; see `uploadSpoolsCsv` below.
@@ -6941,6 +6984,9 @@ export interface LibraryFileListItem {
   created_by_id: number | null;
   created_by_username: string | null;
   created_at: string;
+  // Real on-disk modification time (#2680). Null for managed uploads; the date
+  // sort and "Modified" column use `fs_modified_at ?? created_at`.
+  fs_modified_at: string | null;
   print_name: string | null;
   print_time_seconds: number | null;
   filament_used_grams: number | null;
@@ -7552,6 +7598,7 @@ export interface SpoolBuddyDevice {
   firmware_version: string | null;
   has_nfc: boolean;
   has_scale: boolean;
+  has_barcode: boolean;
   tare_offset: number;
   calibration_factor: number;
   nfc_reader_type: string | null;
@@ -7564,6 +7611,8 @@ export interface SpoolBuddyDevice {
   pending_command: string | null;
   nfc_ok: boolean;
   scale_ok: boolean;
+  barcode_ok: boolean;
+  barcode_enabled: boolean;
   uptime_s: number;
   update_status: string | null;
   update_message: string | null;
@@ -7620,6 +7669,12 @@ export const spoolbuddyApi = {
     request<{ status: string }>(`/spoolbuddy/devices/${deviceId}/display`, {
       method: 'PUT',
       body: JSON.stringify({ brightness, blank_timeout: blankTimeout }),
+    }),
+
+  setScannerSettings: (deviceId: string, enabled: boolean) =>
+    request<{ status: string; enabled: boolean }>(`/spoolbuddy/devices/${deviceId}/scanner`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
     }),
 
   updateSystemConfig: (deviceId: string, backendUrl: string, apiKey?: string) =>

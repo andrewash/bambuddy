@@ -2,7 +2,7 @@ import json
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select
@@ -31,6 +31,7 @@ from backend.app.models.spool_k_profile import SpoolKProfile
 from backend.app.models.user import User
 from backend.app.schemas.location import LocationCreate, LocationResponse, LocationUpdate
 from backend.app.schemas.spool import (
+    ALLOWED_EFFECT_TYPES,
     MAX_EXTRA_COLOR_STOPS,
     BarcodeLookupResponse,
     LabelParseResponse,
@@ -48,6 +49,7 @@ from backend.app.schemas.spool import (
 )
 from backend.app.schemas.spool_usage import SpoolUsageHistoryResponse
 from backend.app.services import ofd_client, spoolmandb_community_client
+from backend.app.services.catalog_search import BARCODE_FIELD_KEYS, CatalogSearchRow, search_catalog
 from backend.app.services.filament_label_parser import extract_barcode, extract_sku, parse_title
 from backend.app.services.location_service import (
     DUPLICATE_LOCATION_NAME,
@@ -293,6 +295,21 @@ async def apply_spool_to_slot_via_mqtt(
             "No stored K-profile for spool %d — reset slot to Default K (cali_idx=-1)",
             spool.id,
         )
+
+    # Register a read-back verification so the next AMS pushes can confirm the
+    # tray actually accepted this assignment (#2582). We record the same
+    # effective filament id we pushed plus the cali_idx we selected (or -1 for
+    # the Default-K reset above), and the client fires on_assignment_verified
+    # on match/timeout. Colour is informational only — the match keys on the
+    # filament id the slicer echoes back.
+    verify_cali_idx = matching_kp.cali_idx if (matching_kp and matching_kp.cali_idx is not None) else -1
+    client.register_assignment_verification(
+        ams_id=ams_id,
+        tray_id=tray_id,
+        tray_info_idx=effective_tray_info_idx,
+        tray_color=tray_color,
+        cali_idx=verify_cali_idx,
+    )
 
     # Persist slot preset mapping for UI display (preset_name on hover card).
     # Shared with the RFID auto-assign path — both must keep this row in sync
@@ -1095,25 +1112,35 @@ def _derive_effect_type(variant: dict) -> str | None:
     """
     hexes = variant.get("hexes") or []
     direction = variant.get("multi_color_direction")
+    derived: str | None = None
     if direction and len(hexes) >= 2:
         if direction == "longitudinal":
-            return "gradient"
-        if len(hexes) == 2:
-            return "dual-color"
-        if len(hexes) == 3:
-            return "tri-color"
-        return "multicolor"
-    if variant.get("glow"):
-        return "glow"
-    if variant.get("pattern") == "sparkle":
-        return "sparkle"
-    if variant.get("pattern") == "marble":
-        return "marble"
-    if variant.get("translucent"):
-        return "translucent"
-    if variant.get("finish") == "matte":
-        return "matte"
-    return None
+            derived = "gradient"
+        elif len(hexes) == 2:
+            derived = "dual-color"
+        elif len(hexes) == 3:
+            derived = "tri-color"
+        else:
+            derived = "multicolor"
+    elif variant.get("glow"):
+        derived = "glow"
+    elif variant.get("pattern") == "sparkle":
+        derived = "sparkle"
+    elif variant.get("pattern") == "marble":
+        derived = "marble"
+    elif variant.get("translucent"):
+        derived = "translucent"
+    elif variant.get("finish") == "matte":
+        derived = "matte"
+
+    # Belt-and-braces: every branch above already returns a value that's
+    # currently in ALLOWED_EFFECT_TYPES, but nothing enforced that — a typo or
+    # a drift between this function and the schema enum would otherwise write
+    # a value the spool form / rendering code has never heard of.
+    if derived is not None and derived not in ALLOWED_EFFECT_TYPES:
+        logger.warning("_derive_effect_type produced %r, not in ALLOWED_EFFECT_TYPES - dropping it", derived)
+        return None
+    return derived
 
 
 @router.post("/colors/sync-spoolmandb-community")
@@ -1377,15 +1404,20 @@ async def create_spool(
     _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_UPDATE),
 ):
     """Create a new spool."""
+    data_dict = spool_data.model_dump()
+    # barcode_is_refill is a write-only hint (persisted onto the SpoolCode row,
+    # not a Spool column) — pop it before building the ORM object.
+    barcode_is_refill = bool(data_dict.pop("barcode_is_refill", False))
+    fields_set = set(spool_data.model_fields_set) - {"barcode_is_refill"}
     try:
-        payload = await prepare_internal_spool_payload(db, spool_data.model_dump(), set(spool_data.model_fields_set))
+        payload = await prepare_internal_spool_payload(db, data_dict, fields_set)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     spool = Spool(**payload)
     db.add(spool)
     await db.commit()
     await db.refresh(spool)
-    await _persist_barcode_codes_for_spool(db, spool.id, spool.barcode)
+    await _persist_barcode_codes_for_spool(db, spool.id, spool.barcode, primary_is_refill=barcode_is_refill)
     result = await db.execute(
         select(Spool).options(selectinload(Spool.k_profiles), selectinload(Spool.codes)).where(Spool.id == spool.id)
     )
@@ -1401,9 +1433,11 @@ async def bulk_create_spools(
 ):
     """Create multiple identical spools."""
     spools = []
-    fields_set = set(data.spool.model_fields_set)
+    data_dict = data.spool.model_dump()
+    barcode_is_refill = bool(data_dict.pop("barcode_is_refill", False))
+    fields_set = set(data.spool.model_fields_set) - {"barcode_is_refill"}
     try:
-        payload = await prepare_internal_spool_payload(db, data.spool.model_dump(), fields_set)
+        payload = await prepare_internal_spool_payload(db, data_dict, fields_set)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     for _ in range(data.quantity):
@@ -1417,7 +1451,7 @@ async def bulk_create_spools(
         # external cross-reference once, not once per spool.
         code, kind, all_codes = await _resolve_codes_for_barcode(payload["barcode"])
         for spool_id in ids:
-            await _persist_spool_codes(db, spool_id, code, kind, all_codes)
+            await _persist_spool_codes(db, spool_id, code, kind, all_codes, primary_is_refill=barcode_is_refill)
     result = await db.execute(
         select(Spool).options(selectinload(Spool.k_profiles), selectinload(Spool.codes)).where(Spool.id.in_(ids))
     )
@@ -1425,16 +1459,7 @@ async def bulk_create_spools(
     return list(result.scalars().all())
 
 
-_BARCODE_FIELD_KEYS = (
-    "material",
-    "brand",
-    "subtype",
-    "color_name",
-    "rgba",
-    "label_weight",
-    "nozzle_temp_min",
-    "nozzle_temp_max",
-)
+_BARCODE_FIELD_KEYS = BARCODE_FIELD_KEYS
 
 
 async def _external_all_codes(code: str, kind: str) -> tuple[dict, str, list[dict]] | None:
@@ -1588,14 +1613,26 @@ async def _resolve_barcode(
 
 
 async def _persist_spool_codes(
-    db: AsyncSession, spool_id: int, primary_code: str, primary_kind: str, all_codes: list[dict]
+    db: AsyncSession,
+    spool_id: int,
+    primary_code: str,
+    primary_kind: str,
+    all_codes: list[dict],
+    primary_is_refill: bool = False,
 ) -> None:
     """Store `primary_code` plus every sibling in `all_codes` against `spool_id`,
-    deduped on (spool_id, code). The scanned/typed code is always `is_primary`."""
+    deduped on (spool_id, code). The scanned/typed code is always `is_primary`.
+
+    `primary_is_refill` records whether the primary code is the no-spool refill
+    variant — the databases mark this via eans_refill/spool_refill, but a
+    user-linked/manually-typed code has no such signal, so the caller supplies
+    it (e.g. the SpoolBuddy refill toggle)."""
     existing_result = await db.execute(select(SpoolCode.code).where(SpoolCode.spool_id == spool_id))
     existing_codes = {row[0] for row in existing_result.all()}
 
-    to_insert: dict[str, dict] = {primary_code: {"kind": primary_kind, "is_refill": False, "is_primary": True}}
+    to_insert: dict[str, dict] = {
+        primary_code: {"kind": primary_kind, "is_refill": primary_is_refill, "is_primary": True}
+    }
     for entry in all_codes:
         code_val = entry.get("code")
         if not code_val or code_val == primary_code:
@@ -1630,7 +1667,9 @@ async def _resolve_codes_for_barcode(barcode: str) -> tuple[str, str, list[dict]
     return code, kind, all_codes
 
 
-async def _persist_barcode_codes_for_spool(db: AsyncSession, spool_id: int, barcode: str | None) -> None:
+async def _persist_barcode_codes_for_spool(
+    db: AsyncSession, spool_id: int, barcode: str | None, primary_is_refill: bool = False
+) -> None:
     """Replace every SpoolCode row for `spool_id` with the set cross-referenced
     from `barcode` — or with nothing, if `barcode` is unset. Delete-then-insert
     (mirrors Spoolman mode's reset-then-set of bambu_linked_codes in
@@ -1645,12 +1684,33 @@ async def _persist_barcode_codes_for_spool(db: AsyncSession, spool_id: int, barc
         await db.commit()
         return
     code, kind, all_codes = await _resolve_codes_for_barcode(barcode)
-    await _persist_spool_codes(db, spool_id, code, kind, all_codes)
+    await _persist_spool_codes(db, spool_id, code, kind, all_codes, primary_is_refill=primary_is_refill)
+
+
+@router.get("/barcode/catalog-search", response_model=list[CatalogSearchRow])
+async def barcode_catalog_search(
+    q: str = Query(..., min_length=2, max_length=100),
+    limit: int = Query(25, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_READ),
+):
+    """Search inventory + cached community databases for the kiosk "Find This
+    Filament" flow (see services/catalog_search.py for the search itself).
+
+    Declared before ``GET /barcode/{barcode}`` so the literal path wins
+    routing over the parameterised one.
+    """
+    settings = await _load_settings_map(db)
+    client = await _ensure_spoolman_client(settings)
+    return await search_catalog(db, q, limit, settings, client)
 
 
 @router.get("/barcode/{barcode}", response_model=BarcodeLookupResponse)
 async def lookup_barcode(
-    barcode: str,
+    # Matches Spool.barcode's VARCHAR(64) / SpoolCreate/SpoolUpdate's max_length
+    # — without this, an arbitrarily long path segment reached classify_code
+    # and the external-lookup chain unbounded.
+    barcode: str = Path(..., max_length=64),
     db: AsyncSession = Depends(get_db),
     _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_READ),
 ):
@@ -1666,11 +1726,13 @@ async def lookup_barcode(
     canonical, kind = classify_code(barcode)
     fields, source, all_codes = await _resolve_barcode(db, canonical, kind, settings)
     linked_codes = [c for c in all_codes if c["code"] != canonical]
+    scanned_is_refill = any(c.get("is_refill") for c in all_codes if c["code"] == canonical)
     return BarcodeLookupResponse(
         enabled=lookup_enabled,
         matched=source is not None,
         source=source,
         barcode=canonical,
+        is_refill=scanned_is_refill,
         linked_codes=linked_codes,
         **fields,
     )
@@ -1697,10 +1759,17 @@ async def parse_label(
     """
     settings = await _load_settings_map(db)
 
-    try:
-        extra_brands = await ofd_client.get_brands()
-    except Exception:
-        extra_brands = []
+    # _resolve_barcode below already honors this for the actual barcode
+    # lookup, but get_brands() is a standalone OFD call used only for the
+    # text-heuristic brand hints - without this check it hit OFD even with
+    # Scan-to-Add Barcode Lookup turned off.
+    lookup_enabled = settings.get("barcode_lookup_enabled", "true") == "true"
+    extra_brands: list[str] = []
+    if lookup_enabled:
+        try:
+            extra_brands = await ofd_client.get_brands()
+        except Exception:
+            extra_brands = []
     guessed = parse_title(payload.text, extra_brands=extra_brands)
     # diameter_mm has no home on Spool — it's parse-only context, not persisted.
     guessed.pop("diameter_mm", None)
@@ -2286,6 +2355,18 @@ async def assign_spool(
             )
         except Exception as e:
             logger.warning("MQTT auto-configure failed for spool %d: %s", spool.id, e)
+        else:
+            # Nudge a fresh pushall so the read-back verification registered in
+            # apply_spool_to_slot_via_mqtt (#2582) has current tray telemetry to
+            # compare against within its window, instead of waiting for the next
+            # idle push. Best-effort — the periodic push is the fallback.
+            if configured:
+                try:
+                    client = printer_manager.get_client(data.printer_id)
+                    if client:
+                        client.request_status_update()
+                except Exception:
+                    pass
     # pending_config is the "config not landed yet" UI marker. True when the
     # firmware said empty, OR when MQTT couldn't actually publish (printer
     # offline, no client, transient failure). on_ams_change replay re-fires

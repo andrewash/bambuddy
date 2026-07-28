@@ -59,6 +59,7 @@ class MappedSpoolFields(TypedDict):
     location_id: int | None
     k_profiles: list[Any]
     linked_codes: list[dict[str, Any]]
+    is_refill: bool
 
 
 class NormalizedVendorRef(TypedDict):
@@ -335,6 +336,19 @@ def _map_spoolman_spool(spool: dict) -> MappedSpoolFields:
     nozzle_temp_raw = filament.get("settings_extruder_temp")
     nozzle_temp_min: int | None = _safe_int(nozzle_temp_raw, 0) or None
 
+    # Refill flag: we persist it under spool.extra.bambu_barcode_is_refill as a
+    # JSON-encoded bool ("true"/"false"), same pattern as the other bambu_* fields.
+    raw_is_refill = extra.get("bambu_barcode_is_refill")
+    if isinstance(raw_is_refill, bool):
+        spool_is_refill = raw_is_refill
+    elif isinstance(raw_is_refill, str):
+        try:
+            spool_is_refill = bool(json.loads(raw_is_refill))
+        except (ValueError, TypeError):
+            spool_is_refill = raw_is_refill.strip().lower() in ("true", "1")
+    else:
+        spool_is_refill = False
+
     return {
         "id": spool_id,
         "material": material,
@@ -346,6 +360,7 @@ def _map_spoolman_spool(spool: dict) -> MappedSpoolFields:
         # spool.extra.bambu_barcode (JSON-encoded string), same pattern as
         # bambu_slicer_filament/bambu_color_name.
         "barcode": (_extract_extra_str(extra, "bambu_barcode") or None),
+        "is_refill": spool_is_refill,
         "brand": vendor.get("name") or None,
         "label_weight": label_weight,
         "core_weight": _safe_int(

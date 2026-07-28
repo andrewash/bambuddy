@@ -74,6 +74,48 @@ class TestPersistSpoolCodes:
         assert by_code["6938936716786"].is_refill is True
         assert by_code["ALZMNTABS01"].kind == "sku"
 
+    async def test_primary_is_refill_flag_is_stored(self, engine):
+        # A user-linked / manually-typed code carries no DB refill signal, so the
+        # caller (SpoolBuddy refill toggle) supplies primary_is_refill.
+        async with AsyncSession(engine) as session:
+            await _insert_spool(session, 1)
+            await _persist_spool_codes(
+                session,
+                spool_id=1,
+                primary_code="6938936716785",
+                primary_kind="gtin",
+                all_codes=[],
+                primary_is_refill=True,
+            )
+            codes = await _codes_for(session, 1)
+
+        assert len(codes) == 1
+        assert codes[0].is_primary is True
+        assert codes[0].is_refill is True
+
+    async def test_is_refill_property_reflects_primary_code(self, engine):
+        # The Spool.is_refill read property (drives the UI "Refill" badge) must
+        # mirror the primary SpoolCode's is_refill, and be False otherwise.
+        from sqlalchemy.orm import selectinload
+
+        async with AsyncSession(engine) as session:
+            await _insert_spool(session, 1)
+            await _persist_spool_codes(
+                session, spool_id=1, primary_code="R", primary_kind="gtin", all_codes=[], primary_is_refill=True
+            )
+            await _insert_spool(session, 2)
+            await _persist_spool_codes(
+                session, spool_id=2, primary_code="W", primary_kind="gtin", all_codes=[], primary_is_refill=False
+            )
+            loaded = {}
+            for sid in (1, 2):
+                res = await session.execute(
+                    select(Spool).options(selectinload(Spool.codes)).where(Spool.id == sid)
+                )
+                loaded[sid] = res.scalar_one()
+            assert loaded[1].is_refill is True
+            assert loaded[2].is_refill is False
+
     async def test_dedupes_against_existing_rows(self, engine):
         async with AsyncSession(engine) as session:
             await _insert_spool(session, 1)

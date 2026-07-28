@@ -210,7 +210,12 @@ class SpoolBase(BaseModel):
 
 
 class SpoolCreate(SpoolBase):
-    pass
+    # Write-only hint: whether `barcode` is the "refill" (no-spool) variant.
+    # Community DBs mark this via eans_refill/spool_refill, but a user-linked or
+    # manually-typed code carries no such signal, so the SpoolBuddy scan flow
+    # lets the user set it. Persisted onto the barcode's SpoolCode row; not a
+    # Spool column, so it's popped before the ORM object is built.
+    barcode_is_refill: bool = False
 
 
 class SpoolBulkCreate(BaseModel):
@@ -320,6 +325,10 @@ class SpoolResponse(SpoolBase):
     updated_at: datetime
     k_profiles: list[SpoolKProfileResponse] = []
     linked_codes: list[LinkedCode] = []
+    # Read-only: whether the primary barcode is the no-spool "refill" variant
+    # (from its SpoolCode row). Drives the "Refill" badge in the UI. Populated
+    # from the Spool.is_refill property, so callers must eager-load `codes`.
+    is_refill: bool = False
 
     class Config:
         from_attributes = True
@@ -346,6 +355,10 @@ class BarcodeLookupResponse(BaseModel):
     label_weight: int | None = None
     nozzle_temp_min: int | None = None
     nozzle_temp_max: int | None = None
+    # Whether the *scanned* code itself is a no-spool refill (per the community
+    # DBs' eans_refill / spool_refill). Lets the kiosk auto-arm its refill toggle
+    # instead of making the user remember to flip it for a known refill box.
+    is_refill: bool = False
     linked_codes: list[LinkedCode] = []
 
 

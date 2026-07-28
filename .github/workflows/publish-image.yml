@@ -1,0 +1,61 @@
+name: Publish image to GHCR
+
+# Builds the full Bambuddy image (frontend + backend, from the root Dockerfile)
+# and publishes it to this repo's GitHub Container Registry namespace, so the
+# farm host can deploy a new build with a plain `docker compose pull` instead of
+# a hand-built, hand-shipped image.
+#
+# Publishes to ghcr.io/andrewash/bambuddy (this repo's `origin`). The built-in
+# GITHUB_TOKEN can only push to the namespace of the repo it runs in, so this
+# must run from andrewash/bambuddy (a 403 otherwise).
+on:
+  push:
+    branches:
+      - feature/spoolbuddy-barcode-scanner
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+jobs:
+  build-and-push:
+    # Native arm64 runner (free for public repos) so the image matches the
+    # aarch64 farm host without slow QEMU emulation.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write   # lets GITHUB_TOKEN push to ghcr.io/andrewash/*
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `:barcode` is a stable tag to point the farm's compose `image:` at.
+      # The sanitized branch name is also published for traceability.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/andrewash/bambuddy
+          tags: |
+            type=raw,value=barcode
+            type=ref,event=branch
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Farm host (192.168.1.50) is aarch64; built natively on the arm64
+          # runner above, so no QEMU. If you ever need amd64 too, add it here
+          # and switch runs-on back to ubuntu-latest (that stage then emulates).
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
