@@ -1443,6 +1443,63 @@ async def run_migrations(conn):
     else:
         await _safe_execute(conn, "ALTER TABLE print_queue ADD COLUMN nozzle_offset_cali BOOLEAN DEFAULT TRUE")
 
+    # Migration: convert bed_levelling / flow_cali / nozzle_offset_cali from
+    # boolean to tri-state strings (off/on/auto). BambuStudio exposes a third
+    # "auto" state for these (skip the calibration if it was done recently); our
+    # booleans could only send force-on / off. Legacy rows map true->'on',
+    # false->'off'; the new default is 'auto'. Idempotent on both dialects:
+    # SQLite leans on column affinity (a BOOLEAN-declared column stores text
+    # fine) and only rewrites rows still holding 0/1; PostgreSQL alters the
+    # column type only while it is still boolean, so re-runs and fresh
+    # create_all() schemas (already VARCHAR) are skipped. Column names are
+    # hardcoded constants, not user input.
+    _tristate_cols = ("bed_levelling", "flow_cali", "nozzle_offset_cali")
+    if is_sqlite():
+        for _col in _tristate_cols:
+            async with conn.begin_nested():
+                # B608 is a false positive here: _col is a hardcoded constant
+                # from _tristate_cols, never user input, and SQL identifiers
+                # can't be bound as parameters. Suppressed inline below.
+                await conn.execute(
+                    text(f"UPDATE print_queue SET {_col} = 'on' WHERE {_col} IN (1, '1', 'true', 'True')")  # nosec B608
+                )
+                await conn.execute(
+                    text(f"UPDATE print_queue SET {_col} = 'off' WHERE {_col} IN (0, '0', 'false', 'False')")  # nosec B608
+                )
+    else:
+        for _col in _tristate_cols:
+            result = await conn.execute(
+                text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = 'print_queue' AND column_name = :col"
+                ),
+                {"col": _col},
+            )
+            row = result.fetchone()
+            if row and row[0] == "boolean":
+                await _safe_execute(conn, f"ALTER TABLE print_queue ALTER COLUMN {_col} DROP DEFAULT")
+                await _safe_execute(
+                    conn,
+                    f"ALTER TABLE print_queue ALTER COLUMN {_col} TYPE VARCHAR(8) "
+                    f"USING (CASE WHEN {_col} THEN 'on' ELSE 'off' END)",
+                )
+                await _safe_execute(conn, f"ALTER TABLE print_queue ALTER COLUMN {_col} SET DEFAULT 'auto'")
+
+    # Migration: normalise the workflow-default settings rows that back these
+    # options from legacy "true"/"false" to the tri-state vocabulary so the API
+    # returns real values (the AppSettings validator also coerces on read, but
+    # rewriting keeps the stored data honest). Only these three became tri-state.
+    for _skey in ("default_bed_levelling", "default_flow_cali", "default_nozzle_offset_cali"):
+        async with conn.begin_nested():
+            await conn.execute(
+                text("UPDATE settings SET value = 'on' WHERE key = :k AND lower(value) IN ('true', '1')"),
+                {"k": _skey},
+            )
+            await conn.execute(
+                text("UPDATE settings SET value = 'off' WHERE key = :k AND lower(value) IN ('false', '0')"),
+                {"k": _skey},
+            )
+
     # Migration: Per-item preheat / heat-soak override (#1468). preheat_override
     # is one of {inherit, on, off} — 'inherit' falls back to the global
     # preheat_enabled setting; 'on' / 'off' force the decision. The chamber
@@ -3703,6 +3760,35 @@ async def run_migrations(conn):
     # #2603 archive plate_id backfill above so print_archives.plate_id is populated.
     await _migrate_scope_run_filament_to_plate(conn)
 
+    # Migration: Add controls_printer_power to smart_plugs (#2629). Marks
+    # whether a plug actually feeds the printer's own power — only then may an
+    # auto-off mark the printer offline. Defaults to true so existing plugs
+    # keep the previous behaviour; accessory plugs (filter fan, lights) are
+    # opted out by the user. BOOLEAN literals differ per dialect (SQLite has
+    # no true/false keyword), so the default is dialect-branched.
+    if is_sqlite():
+        await _safe_execute(conn, "ALTER TABLE smart_plugs ADD COLUMN controls_printer_power BOOLEAN DEFAULT 1")
+    else:
+        await _safe_execute(
+            conn,
+            "ALTER TABLE smart_plugs ADD COLUMN IF NOT EXISTS controls_printer_power BOOLEAN DEFAULT true",
+        )
+
+    # Migration: real filesystem mtime for library files/folders (#2680). The
+    # folder tree's "sort by recent activity" and the file pane's date sort must
+    # track the on-disk mtime (``ls -t``), not Bambuddy's DB ``updated_at`` — for
+    # a bulk external scan every row's ``updated_at`` is the same scan instant, so
+    # ordering was arbitrary. Nullable; the timestamp type differs by dialect
+    # (SQLite DATETIME vs Postgres TIMESTAMP) so an existing-DB upgrade doesn't hit
+    # "type datetime does not exist" on Postgres. On a fresh DB create_all() already
+    # built the column, so the ALTER is swallowed as "already exists".
+    if is_sqlite():
+        await _safe_execute(conn, "ALTER TABLE library_files ADD COLUMN fs_modified_at DATETIME")
+        await _safe_execute(conn, "ALTER TABLE library_folders ADD COLUMN fs_modified_at DATETIME")
+    else:
+        await _safe_execute(conn, "ALTER TABLE library_files ADD COLUMN fs_modified_at TIMESTAMP")
+        await _safe_execute(conn, "ALTER TABLE library_folders ADD COLUMN fs_modified_at TIMESTAMP")
+
     # Migration: Disambiguate the four ``user_print_*`` notification template
     # names by appending " Email" (#1792). See ``_migrate_rename_user_print_template_names``.
     await _migrate_rename_user_print_template_names(conn)
@@ -3736,16 +3822,36 @@ async def _migrate_backfill_spool_codes(conn) -> None:
     itself) whose kind disagrees with the current classification — covers
     spools created by an earlier, buggier build of this feature on this
     branch. Matching on (spool_id, code) is unique per the table's constraint,
-    so this and the insert are both safe to re-run on every startup.
+    so this and the insert are both safe to re-run.
+
+    Gated to run **exactly once** via a settings flag, same as the #2614
+    plate-filament backfill: without it, this re-scans every spool with a
+    barcode on every single boot forever, an O(N) query cost that grows
+    without bound as the inventory grows. The forward write path (persisting
+    a scanned barcode) already keeps spool_code correct for everything
+    scanned after this migration runs once.
     """
     from sqlalchemy import text
 
     from backend.app.schemas.spool import classify_code
 
+    flag = "_backfill_1880_spool_codes_done"
+
     async with conn.begin_nested():
+        already = (
+            await conn.execute(text('SELECT value FROM settings WHERE "key" = :k'), {"k": flag})
+        ).scalar_one_or_none()
+        if already:
+            return
+
         rows = (await conn.execute(text("SELECT id, barcode FROM spool WHERE barcode IS NOT NULL"))).all()
         for spool_id, barcode in rows:
             code, kind = classify_code(barcode)
+            if not code:
+                # An empty-string (not NULL) barcode classifies to an empty
+                # code — persisting that would create a garbage spool_code
+                # row that never matches any real scan.
+                continue
             existing = (
                 await conn.execute(
                     text("SELECT kind FROM spool_code WHERE spool_id = :spool_id AND code = :code"),
@@ -3765,6 +3871,15 @@ async def _migrate_backfill_spool_codes(conn) -> None:
                     text("UPDATE spool_code SET kind = :kind WHERE spool_id = :spool_id AND code = :code"),
                     {"spool_id": spool_id, "code": code, "kind": kind},
                 )
+
+        # Mark done unconditionally (even when there were no barcoded spools
+        # yet) so this one-shot never re-scans the spool table on subsequent
+        # boots. id/timestamps come from the table's own defaults; "key" is
+        # quoted as it's a keyword.
+        await conn.execute(
+            text('INSERT INTO settings ("key", value) VALUES (:k, :v)'),
+            {"k": flag, "v": "true"},
+        )
 
 
 _USER_PRINT_TEMPLATE_RENAMES: tuple[tuple[str, str, str], ...] = (

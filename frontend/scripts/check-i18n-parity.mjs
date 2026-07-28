@@ -143,6 +143,7 @@ function isAlwaysAllowedIdentical(value) {
 const DE_COGNATES = [
   'Scanner',  // scan-to-add tab — same word in this locale
   '{{ams}} · Slot {{slot}}',  // #2587 runout slot label — "Slot" is the DE term too
+  'Auto',  // calibrationMode_auto — German UI uses the loanword (matches BambuStudio DE)
   'Name', 'Status', 'Tag', 'Tags', 'Online', 'Offline', 'Standard', 'Modus',
   'Stop', 'Reset', 'Test', 'Code', 'Token', 'Server', 'Port', 'Bug', 'Job',
   'Barcode',  // scan-to-add — German uses the same English loanword
@@ -387,6 +388,18 @@ const TR_COGNATES = [
   '{{filament}} @ {{temp}}°C',  // drying badge: filament code + universal °C
 ];
 
+const RU_COGNATES = [
+  'MakerWorld: {{designer}}',
+  'email',
+  '{{printer}}: {{error}}',
+  'Bambu Cloud',
+  'Orca Cloud',
+  '{{name}} — {{stage}} ({{percent}}%) — {{elapsed}}',
+  'EC984C,#6CD4BC,A66EB9,D87694',
+  '({{count}}/8)',
+  '(25%, 50%, 75%)',
+];
+
 const IDENTICAL_TO_EN_ALLOWED = {
   de: new Set(DE_COGNATES),
   fr: new Set(FR_COGNATES),
@@ -398,6 +411,7 @@ const IDENTICAL_TO_EN_ALLOWED = {
   'zh-CN': new Set(ZH_CN_COGNATES),
   'zh-TW': new Set(ZH_TW_COGNATES),
   tr: new Set(TR_COGNATES),
+  ru: new Set(RU_COGNATES),
 };
 
 // Pure comparison logic, exported so tests can verify each failure mode

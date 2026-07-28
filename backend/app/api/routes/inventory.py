@@ -2,7 +2,7 @@ import json
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select
@@ -31,6 +31,7 @@ from backend.app.models.spool_k_profile import SpoolKProfile
 from backend.app.models.user import User
 from backend.app.schemas.location import LocationCreate, LocationResponse, LocationUpdate
 from backend.app.schemas.spool import (
+    ALLOWED_EFFECT_TYPES,
     MAX_EXTRA_COLOR_STOPS,
     BarcodeLookupResponse,
     LabelParseResponse,
@@ -294,6 +295,21 @@ async def apply_spool_to_slot_via_mqtt(
             "No stored K-profile for spool %d — reset slot to Default K (cali_idx=-1)",
             spool.id,
         )
+
+    # Register a read-back verification so the next AMS pushes can confirm the
+    # tray actually accepted this assignment (#2582). We record the same
+    # effective filament id we pushed plus the cali_idx we selected (or -1 for
+    # the Default-K reset above), and the client fires on_assignment_verified
+    # on match/timeout. Colour is informational only — the match keys on the
+    # filament id the slicer echoes back.
+    verify_cali_idx = matching_kp.cali_idx if (matching_kp and matching_kp.cali_idx is not None) else -1
+    client.register_assignment_verification(
+        ams_id=ams_id,
+        tray_id=tray_id,
+        tray_info_idx=effective_tray_info_idx,
+        tray_color=tray_color,
+        cali_idx=verify_cali_idx,
+    )
 
     # Persist slot preset mapping for UI display (preset_name on hover card).
     # Shared with the RFID auto-assign path — both must keep this row in sync
@@ -1096,25 +1112,35 @@ def _derive_effect_type(variant: dict) -> str | None:
     """
     hexes = variant.get("hexes") or []
     direction = variant.get("multi_color_direction")
+    derived: str | None = None
     if direction and len(hexes) >= 2:
         if direction == "longitudinal":
-            return "gradient"
-        if len(hexes) == 2:
-            return "dual-color"
-        if len(hexes) == 3:
-            return "tri-color"
-        return "multicolor"
-    if variant.get("glow"):
-        return "glow"
-    if variant.get("pattern") == "sparkle":
-        return "sparkle"
-    if variant.get("pattern") == "marble":
-        return "marble"
-    if variant.get("translucent"):
-        return "translucent"
-    if variant.get("finish") == "matte":
-        return "matte"
-    return None
+            derived = "gradient"
+        elif len(hexes) == 2:
+            derived = "dual-color"
+        elif len(hexes) == 3:
+            derived = "tri-color"
+        else:
+            derived = "multicolor"
+    elif variant.get("glow"):
+        derived = "glow"
+    elif variant.get("pattern") == "sparkle":
+        derived = "sparkle"
+    elif variant.get("pattern") == "marble":
+        derived = "marble"
+    elif variant.get("translucent"):
+        derived = "translucent"
+    elif variant.get("finish") == "matte":
+        derived = "matte"
+
+    # Belt-and-braces: every branch above already returns a value that's
+    # currently in ALLOWED_EFFECT_TYPES, but nothing enforced that — a typo or
+    # a drift between this function and the schema enum would otherwise write
+    # a value the spool form / rendering code has never heard of.
+    if derived is not None and derived not in ALLOWED_EFFECT_TYPES:
+        logger.warning("_derive_effect_type produced %r, not in ALLOWED_EFFECT_TYPES - dropping it", derived)
+        return None
+    return derived
 
 
 @router.post("/colors/sync-spoolmandb-community")
@@ -1681,7 +1707,10 @@ async def barcode_catalog_search(
 
 @router.get("/barcode/{barcode}", response_model=BarcodeLookupResponse)
 async def lookup_barcode(
-    barcode: str,
+    # Matches Spool.barcode's VARCHAR(64) / SpoolCreate/SpoolUpdate's max_length
+    # — without this, an arbitrarily long path segment reached classify_code
+    # and the external-lookup chain unbounded.
+    barcode: str = Path(..., max_length=64),
     db: AsyncSession = Depends(get_db),
     _: User | None = RequirePermissionIfAuthEnabled(Permission.INVENTORY_READ),
 ):
@@ -1730,10 +1759,17 @@ async def parse_label(
     """
     settings = await _load_settings_map(db)
 
-    try:
-        extra_brands = await ofd_client.get_brands()
-    except Exception:
-        extra_brands = []
+    # _resolve_barcode below already honors this for the actual barcode
+    # lookup, but get_brands() is a standalone OFD call used only for the
+    # text-heuristic brand hints - without this check it hit OFD even with
+    # Scan-to-Add Barcode Lookup turned off.
+    lookup_enabled = settings.get("barcode_lookup_enabled", "true") == "true"
+    extra_brands: list[str] = []
+    if lookup_enabled:
+        try:
+            extra_brands = await ofd_client.get_brands()
+        except Exception:
+            extra_brands = []
     guessed = parse_title(payload.text, extra_brands=extra_brands)
     # diameter_mm has no home on Spool — it's parse-only context, not persisted.
     guessed.pop("diameter_mm", None)
@@ -2319,6 +2355,18 @@ async def assign_spool(
             )
         except Exception as e:
             logger.warning("MQTT auto-configure failed for spool %d: %s", spool.id, e)
+        else:
+            # Nudge a fresh pushall so the read-back verification registered in
+            # apply_spool_to_slot_via_mqtt (#2582) has current tray telemetry to
+            # compare against within its window, instead of waiting for the next
+            # idle push. Best-effort — the periodic push is the fallback.
+            if configured:
+                try:
+                    client = printer_manager.get_client(data.printer_id)
+                    if client:
+                        client.request_status_update()
+                except Exception:
+                    pass
     # pending_config is the "config not landed yet" UI marker. True when the
     # firmware said empty, OR when MQTT couldn't actually publish (printer
     # offline, no client, transient failure). on_ams_change replay re-fires

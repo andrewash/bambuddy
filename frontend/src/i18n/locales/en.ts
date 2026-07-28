@@ -359,6 +359,9 @@ export default {
     toast: {
       printerDeleted: 'Printer deleted',
       missingSpoolAssignment: 'Print started on {{printer}}. Missing spool assignment for: {{slots}}',
+      assignmentVerified: 'Filament loaded on slot {{slot}} ({{printer}})',
+      assignmentVerifiedNoKprofile: 'Slot {{slot}} on {{printer}} loaded, but the flow calibration (K-profile) was not applied',
+      assignmentNotConfirmed: 'Could not confirm the assignment for slot {{slot}} on {{printer}} — check the AMS slot',
       printerAdded: 'Printer added',
       printerUpdated: 'Printer updated',
       failedToDelete: 'Failed to delete printer',
@@ -482,6 +485,8 @@ export default {
       skip: 'Skip',
       confirmTitle: 'Skip Object?',
       confirmMessage: 'Are you sure you want to skip "{{name}}"? This cannot be undone.',
+      confirmAllMessage: 'All remaining objects are selected. This will stop the print job. Continue?',
+      confirmMultipleMessage: 'Skip {{count}} selected objects? This cannot be undone.',
     },
     // Confirm modals
     confirm: {
@@ -1215,6 +1220,8 @@ export default {
     history: {
       emptyTitle: 'No history yet',
       emptyDescription: 'Completed, cancelled, and failed prints will appear here.',
+      showMore: 'Show more',
+      showingCount: 'Showing {{shown}} of {{total}}',
     },
     // Drag ghost label when multi-dragging
     dragGhost: {
@@ -2134,6 +2141,9 @@ export default {
     preheatOverride_inherit: 'Inherit',
     preheatOverride_on: 'On',
     preheatOverride_off: 'Off',
+    calibrationMode_off: 'Off',
+    calibrationMode_on: 'On',
+    calibrationMode_auto: 'Auto',
     preheatTargetOverride: 'Chamber target override (°C, blank = filament default)',
     plateClear: 'Plate-Clear Confirmation',
     requirePlateClear: 'Require plate-clear confirmation',
@@ -3679,6 +3689,9 @@ export default {
     prints: 'Prints',
     ascending: 'Ascending',
     descending: 'Descending',
+    showModified: 'Show modified dates',
+    hideModified: 'Hide modified dates',
+    lastModified: 'Last modified',
     resultsCount: '{{showing}} of {{total}} files',
     selectAll: 'Select All',
     deselectAll: 'Deselect All',
@@ -5363,6 +5376,8 @@ export default {
     autoOffDescription: 'Turn off when print completes (one-shot)',
     autoOffPersistent: 'Keep Enabled',
     autoOffPersistentDescription: 'Stay enabled between prints instead of one-shot',
+    controlsPrinterPower: 'Powers the printer',
+    controlsPrinterPowerDescription: 'Turn off if this plug only powers an accessory (filter fan, lights). Otherwise switching it off marks the printer offline.',
     autoOffAfterDrying: 'Auto Off After Drying',
     autoOffAfterDryingDescription: 'Turn off when AMS drying completes',
     delayAfterDryingMinutes: 'Drying delay (minutes)',

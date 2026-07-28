@@ -356,6 +356,9 @@ export default {
     toast: {
       printerDeleted: 'Yazıcı silindi',
       missingSpoolAssignment: '{{printer}} üzerinde baskı başladı. Şunlar için eksik makara ataması: {{slots}}',
+      assignmentVerified: '{{slot}} yuvasına filament yüklendi ({{printer}})',
+      assignmentVerifiedNoKprofile: '{{printer}} üzerindeki {{slot}} yuvası yüklendi, ancak akış kalibrasyonu profili (K profili) uygulanmadı',
+      assignmentNotConfirmed: '{{printer}} üzerindeki {{slot}} yuvası ataması doğrulanamadı — AMS yuvasını kontrol edin',
       printerAdded: 'Yazıcı eklendi',
       printerUpdated: 'Yazıcı güncellendi',
       failedToDelete: 'Yazıcı silinemedi',
@@ -479,6 +482,8 @@ export default {
       skip: 'Atla',
       confirmTitle: 'Nesne Atlansın mı?',
       confirmMessage: '"{{name}}" atlamak istediğinizden emin misiniz? Bu geri alınamaz.',
+      confirmAllMessage: 'Kalan tüm nesneler seçildi. Bu, yazdırma işini durduracaktır. Devam edilsin mi?',
+      confirmMultipleMessage: 'Seçilen {{count}} nesne atlansın mı? Bu geri alınamaz.',
     },
     // Onay modalleri
     confirm: {
@@ -1201,6 +1206,8 @@ export default {
     history: {
       emptyTitle: 'Henüz geçmiş yok',
       emptyDescription: 'Tamamlanan, iptal edilen ve başarısız baskılar burada görünür.',
+      showMore: 'Daha fazla göster',
+      showingCount: '{{total}} öğeden {{shown}} tanesi gösteriliyor',
     },
     dragGhost: {
       multiCount: '{{count}} öğe',
@@ -2119,6 +2126,9 @@ export default {
     preheatOverride_inherit: 'Devral',
     preheatOverride_on: 'Açık',
     preheatOverride_off: 'Kapalı',
+    calibrationMode_off: 'Kapalı',
+    calibrationMode_on: 'Açık',
+    calibrationMode_auto: 'Otomatik',
     preheatTargetOverride: 'Oda hedefini geçersiz kıl (°C, boş = filament varsayılanı)',
     plateClear: 'Plaka Temizleme Onayı',
     requirePlateClear: 'Plaka temizleme onayı gerektir',
@@ -3646,6 +3656,9 @@ export default {
     prints: 'Baskılar',
     ascending: 'Artan',
     descending: 'Azalan',
+    showModified: 'Değiştirme tarihlerini göster',
+    hideModified: 'Değiştirme tarihlerini gizle',
+    lastModified: 'Son değiştirme',
     resultsCount: '{{total}} dosyadan {{showing}} tanesi',
     selectAll: 'Tümünü Seç',
     deselectAll: 'Seçimi Kaldır',
@@ -5283,6 +5296,8 @@ export default {
     autoOffDescription: 'Baskı tamamlandığında kapat (tek seferlik)',
     autoOffPersistent: 'Etkin Tut',
     autoOffPersistentDescription: 'Tek seferlik yerine baskılar arasında etkin kal',
+    controlsPrinterPower: 'Yazıcıya güç veriyor',
+    controlsPrinterPowerDescription: 'Bu priz yalnızca bir aksesuara (filtre fanı, aydınlatma) güç veriyorsa kapatın. Aksi halde prizi kapatmak yazıcıyı çevrimdışı olarak işaretler.',
     autoOffAfterDrying: 'Kurutmadan Sonra Otomatik Kapat',
     autoOffAfterDryingDescription: 'AMS kurutması tamamlandığında kapat',
     delayAfterDryingMinutes: 'Kurutma gecikmesi (dakika)',

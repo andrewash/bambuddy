@@ -356,6 +356,9 @@ export default {
     toast: {
       printerDeleted: 'Stampante eliminata',
       missingSpoolAssignment: 'Stampa avviata su {{printer}}. Mancano assegnazioni bobina per: {{slots}}',
+      assignmentVerified: 'Filamento caricato nello slot {{slot}} ({{printer}})',
+      assignmentVerifiedNoKprofile: 'Slot {{slot}} su {{printer}} caricato, ma il profilo di calibrazione del flusso (profilo K) non è stato applicato',
+      assignmentNotConfirmed: 'Impossibile confermare l\'assegnazione dello slot {{slot}} su {{printer}} — controlla lo slot AMS',
       printerAdded: 'Stampante aggiunta',
       printerUpdated: 'Stampante aggiornata',
       failedToDelete: 'Impossibile eliminare stampante',
@@ -479,6 +482,8 @@ export default {
       skip: 'Salta',
       confirmTitle: 'Saltare oggetto?',
       confirmMessage: 'Sei sicuro di voler saltare "{{name}}"? Questa azione non può essere annullata.',
+      confirmAllMessage: 'Sono selezionati tutti gli oggetti rimanenti. Questo interromperà il processo di stampa. Continuare?',
+      confirmMultipleMessage: 'Saltare {{count}} oggetti selezionati? Questa azione non può essere annullata.',
     },
     // Confirm modals
     confirm: {
@@ -1201,6 +1206,8 @@ export default {
     history: {
       emptyTitle: 'Nessuna cronologia',
       emptyDescription: 'Le stampe completate, annullate e fallite appariranno qui.',
+      showMore: 'Mostra altri',
+      showingCount: 'Visualizzati {{shown}} di {{total}}',
     },
     dragGhost: {
       multiCount: '{{count}} elementi',
@@ -2071,6 +2078,9 @@ export default {
     preheatOverride_inherit: 'Eredita',
     preheatOverride_on: 'Attivo',
     preheatOverride_off: 'Spento',
+    calibrationMode_off: 'Spento',
+    calibrationMode_on: 'Attivo',
+    calibrationMode_auto: 'Auto',
     preheatTargetOverride: 'Sovrascrivi target camera (°C, vuoto = per filamento)',
     plateClear: 'Conferma piatto libero',
     requirePlateClear: 'Richiedi conferma piatto libero',
@@ -3638,6 +3648,9 @@ export default {
     prints: 'Stampe',
     ascending: 'Crescente',
     descending: 'Decrescente',
+    showModified: 'Mostra date di modifica',
+    hideModified: 'Nascondi date di modifica',
+    lastModified: 'Ultima modifica',
     resultsCount: '{{showing}} di {{total}} file',
     selectAll: 'Seleziona tutto',
     deselectAll: 'Deseleziona tutto',
@@ -5308,6 +5321,8 @@ export default {
     autoOffDescription: 'Spegni quando la stampa è completata (una tantum)',
     autoOffPersistent: 'Mantieni attivo',
     autoOffPersistentDescription: 'Resta attivo tra le stampe invece di una tantum',
+    controlsPrinterPower: 'Alimenta la stampante',
+    controlsPrinterPowerDescription: 'Disattiva se questa presa alimenta solo un accessorio (ventola del filtro, luci). Altrimenti spegnerla segna la stampante come offline.',
     autoOffAfterDrying: 'Spegni dopo asciugatura',
     autoOffAfterDryingDescription: 'Spegni al termine dell\'asciugatura AMS',
     delayAfterDryingMinutes: 'Ritardo dopo asciugatura (minuti)',
